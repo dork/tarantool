@@ -134,6 +134,7 @@ typedef struct tarantool_cfg {
 
 	/*
 	 * Defines fiber/data synchronization fsync(2) policy:
+	 * "none":           does not write to WAL
 	 * "write":          fibers wait for their data to be written to the log.
 	 * "fsync":          fibers wait for their data, fsync(2) follows each write(2)
 	 * "fsync_delay":    fibers wait for their data, fsync every N=wal_fsync_delay seconds,
@@ -161,6 +162,12 @@ typedef struct tarantool_cfg {
 	 */
 	confetti_bool_t	panic_on_snap_error;
 	confetti_bool_t	panic_on_wal_error;
+
+	/* Statistics collector server */
+	char*	stat;
+
+	/* Interval of data pushing to a statistics collector server */
+	int32_t	stat_interval;
 
 	/*
 	 * # BOX

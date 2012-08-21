@@ -726,6 +726,50 @@ fiber_write(const void *buf, size_t count)
  * @note: this is a cancellation point.
  */
 
+ssize_t
+fiber_sendto(struct sockaddr_in *dest, const void *buf, size_t count)
+{
+	int r;
+	unsigned int done = 0;
+
+	fiber_io_start(fiber->fd, EV_WRITE);
+
+	while (count != done) {
+		fiber_io_yield();
+		socklen_t len = sizeof(struct sockaddr_in);
+		if ((r = sendto(fiber->fd, buf + done, count - done, 0,
+				(struct sockaddr*)dest,
+				len)) == -1) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				continue;
+			else
+				break;
+		}
+		done += r;
+	}
+	fiber_io_stop(fiber->fd, EV_WRITE);
+
+	return done;
+}
+
+int
+fiber_socket(int type)
+{
+	fiber->fd = socket(AF_INET, type, 0);
+	if (fiber->fd == -1)
+		goto error;
+	if (set_nonblock(fiber->fd) < 0)
+		goto error;
+	return fiber->fid;
+error:
+	fiber_close();
+	return fiber->fd;
+}
+
+/**
+ * @note: this is a cancellation point.
+ */
+
 int
 fiber_connect(struct sockaddr_in *addr)
 {

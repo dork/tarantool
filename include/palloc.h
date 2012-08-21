@@ -52,5 +52,6 @@ void palloc_set_name(struct palloc_pool *, const char *);
 size_t palloc_allocated(struct palloc_pool *);
 
 void palloc_stat(struct tbuf *buf);
+void palloc_stat2(u64 *total, u64 *used);
 
 #endif /* TARANTOOL_PALLOC_H_INCLUDED */

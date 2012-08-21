@@ -456,6 +456,22 @@ palloc_stat(struct tbuf *buf)
 }
 
 void
+palloc_stat2(u64 *total, u64 *used)
+{
+	struct chunk *chunk;
+	struct palloc_pool *pool;
+	*total = *used = 0;
+	SLIST_FOREACH(pool, &pools, link) {
+		SLIST_FOREACH(chunk, &pool->chunks, busy_link) {
+			*total += chunk->size;
+			*used += chunk->size - chunk->free;
+		}
+		SLIST_FOREACH(chunk, &pool->chunks, free_link)
+			*total += chunk->size;
+	}
+}
+
+void
 palloc_set_name(struct palloc_pool *pool, const char *name)
 {
 	pool->name = name;

@@ -32,6 +32,7 @@
 #include <tarantool_ev.h>
 #include <tbuf.h>
 #include <say.h>
+#include <fiber.h>
 
 #include <assoc.h>
 

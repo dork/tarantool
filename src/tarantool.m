@@ -45,6 +45,9 @@
 #ifdef TARGET_OS_LINUX
 # include <sys/prctl.h>
 #endif
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <admin.h>
 #include <replication.h>
 #include <fiber.h>
@@ -77,6 +80,7 @@ int main_argc;
 static void *main_opt = NULL;
 struct tarantool_cfg cfg;
 static ev_signal *sigs = NULL;
+struct fiber *fiber_stat_pusher = NULL;;
 
 bool init_storage, booting = true;
 
@@ -305,6 +309,62 @@ snapshot(void *ev, int events __attribute__((unused)))
 
 	exit(EXIT_SUCCESS);
 	return 0;
+}
+
+static void
+stat_pusher(void *arg)
+{
+	struct sockaddr_in server;
+	memcpy((void*)&server, (struct sockaddr_in*)arg, sizeof(server));
+	if (fiber_socket(SOCK_DGRAM) == -1) {
+		say_syserror("failed to allocate socket");
+		return;
+	}
+
+	char name[256];
+	int off = 0;
+	if (gethostname(name, sizeof(name)) == -1)
+		off += snprintf(name, sizeof(name), "unknown");
+	else
+		off = strlen(name);
+	off += snprintf(name + off, sizeof(name) - off, ":%d",
+			cfg.primary_port);
+	while (1) {
+		char v[] = "tarantool.test value 12345";
+		if (fiber_sendto(&server, v, sizeof(v)) == -1)
+			say_syserror("sendto()");
+		fiber_sleep(cfg.stat_interval);
+	}
+}
+
+void 
+stat_pusher_init(void)
+{
+	struct sockaddr_in server;
+	char ip_addr[32];
+	int port;
+	int rc;
+	if (cfg.stat == NULL || !strcmp(cfg.stat, ""))
+		return;
+
+	say_crit("using statistics server %s", cfg.stat);
+	rc = sscanf(cfg.stat, "%31[^:]:%i", ip_addr, &port);
+	if (rc != 2) {
+		say_error("incorrect 'stat' configuration format");
+		return;
+	}
+	memset(&server, 0, sizeof(server));
+	server.sin_family = AF_INET;
+	server.sin_port = htons(port);
+	if (inet_aton(ip_addr, &server.sin_addr) < 0) {
+		say_syserror("inet_aton: %s", ip_addr);
+		return;
+	}
+
+	fiber_stat_pusher = fiber_create("stat_pusher", -1, stat_pusher, &server);
+	if (fiber_stat_pusher == NULL)
+		return;
+	fiber_call(fiber_stat_pusher);
 }
 
 static void
@@ -747,6 +807,11 @@ main(int argc, char **argv)
 	 * initialized.
 	 */
 	tarantool_lua_load_init_script(tarantool_L);
+
+	/*
+	 * Initializing remote statistics pusher.
+	 */
+	stat_pusher_init();
 
 	prelease(fiber->gc_pool);
 	say_crit("log level %i", cfg.log_level);
