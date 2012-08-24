@@ -869,6 +869,60 @@ tarantool_box: primary@sessions pri:33013 sec:33014 adm:33015</programlisting>
     </tgroup>
   </table>
 
+
+  <table frame='all' pgwide='1'>
+    <title>Statistics</title>
+    <tgroup cols='6' colsep='1' rowsep='1'>
+      <colspec colnum="1" colname="col1" colwidth="2*"/>
+      <colspec colnum="6" colname="col4" colwidth="6*"/>
+
+      <thead>
+        <row>
+          <entry>Name</entry>
+          <entry>Type</entry>
+          <entry>Default</entry>
+          <entry>Required?</entry>
+          <entry>Dynamic?</entry>
+          <entry>Description</entry>
+        </row>
+      </thead>
+
+      <tbody>
+
+        <row>
+          <entry>stat</entry>
+          <entry>string</entry>
+          <entry>""</entry>
+          <entry>no</entry>
+          <entry>no</entry>
+          <entry>
+            <anchor xml:id="stat" xreflabel="stat"/>
+          Turn on remote server statistics pushing and set
+	  server ip address and port. Example: 127.0.0.1:2003.
+          </entry>
+        </row>
+
+        <row>
+          <entry>stat_interval</entry>
+          <entry>integer</entry>
+          <entry>60</entry>
+          <entry>no</entry>
+          <entry>no</entry>
+          <entry>
+            <anchor xml:id="stat_interval"
+	    xreflabel="stat_interval"/>
+          Periodical interval of statistics pushing to a remote
+	  statistics server.
+          If non-zero, and <olink targetptr="stat"/> is specified,
+	  Tarantool will periodically send collected statistics to
+	  the remote server.
+          </entry>
+        </row>
+
+      </tbody>
+    </tgroup>
+  </table>
+
 </section>
 </chapter>
 
