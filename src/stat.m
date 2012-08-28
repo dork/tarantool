@@ -299,16 +299,16 @@ void stat_pusher_init(void)
 	char ip_addr[32];
 	int port;
 	int rc;
-	if ((cfg.stat == NULL || !strcmp(cfg.stat, "")) &&
+	if ((cfg.stat_addr == NULL || !strcmp(cfg.stat_addr, "")) &&
 	     cfg.stat_interval > 0)
 		return;
 
 	stat_puller_init();
 
-	say_crit("using statistics server %s", cfg.stat);
-	rc = sscanf(cfg.stat, "%31[^:]:%i", ip_addr, &port);
+	say_crit("using statistics server %s", cfg.stat_addr);
+	rc = sscanf(cfg.stat_addr, "%31[^:]:%i", ip_addr, &port);
 	if (rc != 2) {
-		say_error("incorrect 'stat' configuration format");
+		say_error("incorrect 'stat_addr' configuration format");
 		return;
 	}
 	memset(&server, 0, sizeof(server));

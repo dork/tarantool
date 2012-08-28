@@ -164,7 +164,7 @@ typedef struct tarantool_cfg {
 	confetti_bool_t	panic_on_wal_error;
 
 	/* Statistics collector server */
-	char*	stat;
+	char*	stat_addr;
 
 	/* Interval of data pushing to a statistics collector server */
 	int32_t	stat_interval;

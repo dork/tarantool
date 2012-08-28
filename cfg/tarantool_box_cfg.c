@@ -56,7 +56,7 @@ init_tarantool_cfg(tarantool_cfg *c) {
 	c->wal_dir_rescan_delay = 0;
 	c->panic_on_snap_error = false;
 	c->panic_on_wal_error = false;
-	c->stat = NULL;
+	c->stat_addr = NULL;
 	c->stat_interval = 0;
 	c->primary_port = 0;
 	c->secondary_port = 0;
@@ -109,8 +109,8 @@ fill_default_tarantool_cfg(tarantool_cfg *c) {
 	c->wal_dir_rescan_delay = 0.1;
 	c->panic_on_snap_error = true;
 	c->panic_on_wal_error = false;
-	c->stat = strdup("");
-	if (c->stat == NULL) return CNF_NOMEMORY;
+	c->stat_addr = strdup("");
+	if (c->stat_addr == NULL) return CNF_NOMEMORY;
 	c->stat_interval = 60;
 	c->primary_port = 0;
 	c->secondary_port = 0;
@@ -243,8 +243,8 @@ static NameAtom _name__panic_on_snap_error[] = {
 static NameAtom _name__panic_on_wal_error[] = {
 	{ "panic_on_wal_error", -1, NULL }
 };
-static NameAtom _name__stat[] = {
-	{ "stat", -1, NULL }
+static NameAtom _name__stat_addr[] = {
+	{ "stat_addr", -1, NULL }
 };
 static NameAtom _name__stat_interval[] = {
 	{ "stat_interval", -1, NULL }
@@ -762,16 +762,16 @@ acceptValue(tarantool_cfg* c, OptDef* opt, int check_rdonly) {
 			return CNF_RDONLY;
 		c->panic_on_wal_error = bln;
 	}
-	else if ( cmpNameAtoms( opt->name, _name__stat) ) {
+	else if ( cmpNameAtoms( opt->name, _name__stat_addr) ) {
 		if (opt->paramType != scalarType )
 			return CNF_WRONGTYPE;
 		c->__confetti_flags &= ~CNF_FLAG_STRUCT_NOTSET;
 		errno = 0;
-		if (check_rdonly && ( (opt->paramValue.scalarval == NULL && c->stat == NULL) || strcmp(opt->paramValue.scalarval, c->stat) != 0))
+		if (check_rdonly && ( (opt->paramValue.scalarval == NULL && c->stat_addr == NULL) || strcmp(opt->paramValue.scalarval, c->stat_addr) != 0))
 			return CNF_RDONLY;
-		 if (c->stat) free(c->stat);
-		c->stat = (opt->paramValue.scalarval) ? strdup(opt->paramValue.scalarval) : NULL;
-		if (opt->paramValue.scalarval && c->stat == NULL)
+		 if (c->stat_addr) free(c->stat_addr);
+		c->stat_addr = (opt->paramValue.scalarval) ? strdup(opt->paramValue.scalarval) : NULL;
+		if (opt->paramValue.scalarval && c->stat_addr == NULL)
 			return CNF_NOMEMORY;
 	}
 	else if ( cmpNameAtoms( opt->name, _name__stat_interval) ) {
@@ -1256,7 +1256,7 @@ typedef enum IteratorState {
 	S_name__wal_dir_rescan_delay,
 	S_name__panic_on_snap_error,
 	S_name__panic_on_wal_error,
-	S_name__stat,
+	S_name__stat_addr,
 	S_name__stat_interval,
 	S_name__primary_port,
 	S_name__secondary_port,
@@ -1602,16 +1602,16 @@ again:
 			}
 			sprintf(*v, "%s", c->panic_on_wal_error ? "true" : "false");
 			snprintf(buf, PRINTBUFLEN-1, "panic_on_wal_error");
-			i->state = S_name__stat;
+			i->state = S_name__stat_addr;
 			return buf;
-		case S_name__stat:
-			*v = (c->stat) ? strdup(c->stat) : NULL;
-			if (*v == NULL && c->stat) {
+		case S_name__stat_addr:
+			*v = (c->stat_addr) ? strdup(c->stat_addr) : NULL;
+			if (*v == NULL && c->stat_addr) {
 				free(i);
 				out_warning(CNF_NOMEMORY, "No memory to output value");
 				return NULL;
 			}
-			snprintf(buf, PRINTBUFLEN-1, "stat");
+			snprintf(buf, PRINTBUFLEN-1, "stat_addr");
 			i->state = S_name__stat_interval;
 			return buf;
 		case S_name__stat_interval:
@@ -2055,8 +2055,8 @@ dup_tarantool_cfg(tarantool_cfg* dst, tarantool_cfg* src) {
 	dst->wal_dir_rescan_delay = src->wal_dir_rescan_delay;
 	dst->panic_on_snap_error = src->panic_on_snap_error;
 	dst->panic_on_wal_error = src->panic_on_wal_error;
-	if (dst->stat) free(dst->stat);dst->stat = src->stat == NULL ? NULL : strdup(src->stat);
-	if (src->stat != NULL && dst->stat == NULL)
+	if (dst->stat_addr) free(dst->stat_addr);dst->stat_addr = src->stat_addr == NULL ? NULL : strdup(src->stat_addr);
+	if (src->stat_addr != NULL && dst->stat_addr == NULL)
 		return CNF_NOMEMORY;
 	dst->stat_interval = src->stat_interval;
 	dst->primary_port = src->primary_port;
@@ -2154,8 +2154,8 @@ destroy_tarantool_cfg(tarantool_cfg* c) {
 		free(c->logger);
 	if (c->wal_mode != NULL)
 		free(c->wal_mode);
-	if (c->stat != NULL)
-		free(c->stat);
+	if (c->stat_addr != NULL)
+		free(c->stat_addr);
 	if (c->custom_proc_title != NULL)
 		free(c->custom_proc_title);
 	if (c->replication_source != NULL)
@@ -2373,8 +2373,8 @@ cmp_tarantool_cfg(tarantool_cfg* c1, tarantool_cfg* c2, int only_check_rdonly) {
 
 		return diff;
 	}
-	if (confetti_strcmp(c1->stat, c2->stat) != 0) {
-		snprintf(diff, PRINTBUFLEN - 1, "%s", "c->stat");
+	if (confetti_strcmp(c1->stat_addr, c2->stat_addr) != 0) {
+		snprintf(diff, PRINTBUFLEN - 1, "%s", "c->stat_addr");
 
 		return diff;
 }
