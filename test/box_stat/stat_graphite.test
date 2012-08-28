@@ -1,0 +1,37 @@
+import socket, sys
+
+server.restart()
+
+stat_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+stat_server.bind(("127.0.0.1", 2003))
+
+def filter_metric(metric):
+   sys.stdout.push_filter("tarantool\.\S+\:\d+\." + metric + " \d+.\d+ \d+",
+                          "tarantool.<name>:<port>." + metric + " <value> <timestamp>")
+
+filter_metric("server.uptime")
+filter_metric("slab.bytes_used")
+filter_metric("slab.items")
+filter_metric("palloc.bytes_total")
+filter_metric("palloc.bytes_used")
+filter_metric("op.REPLACE.rps")
+filter_metric("op.REPLACE.total")
+filter_metric("op.SELECT.rps")
+filter_metric("op.SELECT.total")
+filter_metric("op.UPDATE.rps")
+filter_metric("op.UPDATE.total")
+filter_metric("op.DELETE.rps")
+filter_metric("op.DELETE.total")
+filter_metric("op.DELETE_1_3.rps")
+filter_metric("op.DELETE_1_3.total")
+filter_metric("op.CALL.rps")
+filter_metric("op.CALL.total")
+
+sys.stdout.clear_all_filters()
+
+data, addr = stat_server.recvfrom(4096)
+print data.strip()
+
+stat_server.close()
+
+# vim: syntax=python

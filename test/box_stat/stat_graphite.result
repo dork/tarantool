@@ -1,0 +1,17 @@
+tarantool.<name>:<port>.server.uptime <value> <timestamp>
+tarantool.<name>:<port>.slab.bytes_used <value> <timestamp>
+tarantool.<name>:<port>.slab.items <value> <timestamp>
+tarantool.<name>:<port>.palloc.bytes_total <value> <timestamp>
+tarantool.<name>:<port>.palloc.bytes_used <value> <timestamp>
+tarantool.<name>:<port>.op.REPLACE.rps <value> <timestamp>
+tarantool.<name>:<port>.op.REPLACE.total <value> <timestamp>
+tarantool.<name>:<port>.op.SELECT.rps <value> <timestamp>
+tarantool.<name>:<port>.op.SELECT.total <value> <timestamp>
+tarantool.<name>:<port>.op.UPDATE.rps <value> <timestamp>
+tarantool.<name>:<port>.op.UPDATE.total <value> <timestamp>
+tarantool.<name>:<port>.op.DELETE_1_3.rps <value> <timestamp>
+tarantool.<name>:<port>.op.DELETE_1_3.total <value> <timestamp>
+tarantool.<name>:<port>.op.DELETE.rps <value> <timestamp>
+tarantool.<name>:<port>.op.DELETE.total <value> <timestamp>
+tarantool.<name>:<port>.op.CALL.rps <value> <timestamp>
+tarantool.<name>:<port>.op.CALL.total <value> <timestamp>
