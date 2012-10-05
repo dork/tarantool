@@ -491,6 +491,15 @@ check_spaces(struct tarantool_cfg *conf)
 			case TREE:
 				/* extra check for tree index not needed */
 				break;
+			case BITMAP:
+				/* check bitmap index */
+				/* bitmap index must has single-field key */
+				if (key_part_count != 1) {
+					out_warning(0, "(space = %zu index = %zu) "
+						    "bitmap index must has a single-field key", i, j);
+					return -1;
+				}
+				break;
 			default:
 				assert(false);
 			}
