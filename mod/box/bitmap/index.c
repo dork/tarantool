@@ -62,13 +62,36 @@ struct bitmap_index {
 	size_t bitmaps_size;
 };
 
-void bitmap_index_new(struct bitmap_index **pindex, size_t initial_size)
+int bitmap_index_new(struct bitmap_index **pindex, size_t initial_size)
 {
+	int rc = -1;
+
 	*pindex = calloc(1, sizeof(struct bitmap_index));
+	if (*pindex == NULL) {
+		goto error_0;
+	}
+
 	struct bitmap_index *index = *pindex;
 	index->bitmaps = calloc(initial_size+1, sizeof(*index->bitmaps));
+	if (index->bitmaps == NULL) {
+		goto error_1;
+	}
+
 	index->bitmaps_size = initial_size+1;
-	bitmap_new(&(index->bitmaps[0]));
+	if (bitmap_new(&(index->bitmaps[0])) < 0) {
+		goto error_2;
+	}
+
+	return 0;
+
+	/* error handling */
+error_2:
+	free(index->bitmaps);
+error_1:
+	free(*pindex);
+error_0:
+	*pindex = NULL;
+	return rc;
 }
 
 void bitmap_index_free(struct bitmap_index **pindex)
@@ -88,7 +111,7 @@ void bitmap_index_free(struct bitmap_index **pindex)
 	*pindex = NULL;
 }
 
-void bitmap_index_insert(struct bitmap_index *index,
+int bitmap_index_insert(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value) {
 	size_t bitmaps_size_new = 1 + key_size * CHAR_BIT;
@@ -96,6 +119,10 @@ void bitmap_index_insert(struct bitmap_index *index,
 		/* Resize index */
 		struct bitmap **bitmaps = realloc(index->bitmaps,
 				bitmaps_size_new * sizeof(*index->bitmaps));
+		if (bitmaps == NULL) {
+			return -1;
+		}
+
 		for (size_t b = index->bitmaps_size; b < bitmaps_size_new; b++) {
 			bitmaps[b] = NULL;
 		}
@@ -112,22 +139,31 @@ void bitmap_index_insert(struct bitmap_index *index,
 	while(next_bit(key, key_size, &pos)) {
 		size_t b = pos + 1;
 		if (index->bitmaps[b] == NULL) {
-			bitmap_new(&index->bitmaps[b]);
+			if (bitmap_new(&index->bitmaps[b]) < 0) {
+				return -1;
+			}
 		}
 
-		bitmap_set(index->bitmaps[b], value, 1);
+		/* TODO(roman): rollback previous operations on error */
+		if (bitmap_set(index->bitmaps[b], value, 1) < 0) {
+			return -1;
+		}
 		pos++;
 	}
 
-	bitmap_set(index->bitmaps[0], value, 1);
+	if (bitmap_set(index->bitmaps[0], value, 1) < 0) {
+		return -1;
+	}
+
+	return 0;
 }
 
-void bitmap_index_remove(struct bitmap_index *index,
+int bitmap_index_remove(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value) {
 	size_t bitmaps_size_needed = 1 + key_size * CHAR_BIT;
 	if (bitmaps_size_needed > index->bitmaps_size) {
-		return;
+		return 0;
 	}
 
 	size_t pos = 0;
@@ -141,21 +177,38 @@ void bitmap_index_remove(struct bitmap_index *index,
 			continue;
 		}
 
-		bitmap_set(index->bitmaps[b], value, 0);
+		/* TODO(roman): rollback previous operations on error */
+		if (bitmap_set(index->bitmaps[b], value, 0) < 0) {
+			return -1;
+		}
 		pos++;
 	}
 
-	bitmap_set(index->bitmaps[0], value, 0);
+	if (bitmap_set(index->bitmaps[0], value, 0) < 0) {
+		return -1;
+	}
+
+	return 0;
 }
 
-void bitmap_index_iter(struct bitmap_index *index,
+int bitmap_index_iterate(struct bitmap_index *index,
 			struct bitmap_iterator **pit,
 			void *key, size_t key_size) {
+	int rc = -1;
+	*pit = NULL;
 
 	struct bitmap **used_bitmaps = calloc(index->bitmaps_size,
 					sizeof(*used_bitmaps));
+	if (used_bitmaps == NULL) {
+		goto free_0;
+	}
+
 	int *used_bitmap_flags = calloc(index->bitmaps_size,
 					sizeof(*used_bitmap_flags));
+	if (used_bitmap_flags == NULL) {
+		goto free_1;
+	}
+
 	size_t used_bitmaps_size = 0;
 	int result_flags = 0;
 
@@ -181,11 +234,20 @@ void bitmap_index_iter(struct bitmap_index *index,
 		used_bitmaps_size = 0;
 	}
 
-	bitmap_iterator_newn(pit, used_bitmaps, used_bitmaps_size,
-			used_bitmap_flags, result_flags);
+	if (bitmap_iterator_newn(pit, used_bitmaps, used_bitmaps_size,
+			used_bitmap_flags, result_flags) < 0) {
+		goto free_1;
+	}
 
+	rc = 0;
+
+
+free_1:
 	free(used_bitmap_flags);
+free_0:
 	free(used_bitmaps);
+
+	return rc;
 }
 
 bool bitmap_index_contains_value(struct bitmap_index *index, size_t value) {

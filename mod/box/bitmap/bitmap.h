@@ -53,7 +53,7 @@ struct bitmap_iterator;
  * @brief Allocates and construct new bitmap and sets value of *pbitmap.
  * @param pbitmap
  */
-void bitmap_new(struct bitmap **pbitmap);
+int bitmap_new(struct bitmap **pbitmap);
 
 /**
  * @brief Destruct and deallocates bitmaps and sets *pbitmap to NULL.
@@ -73,9 +73,9 @@ bool bitmap_get(struct bitmap *bitmap, size_t pos);
  * @brief Sets a bit in the bitmap
  * @param bitmap object
  * @param pos position (index)
- * @return
+ * @return 0 on success and -1 on error
  */
-void bitmap_set(struct bitmap *bitmap, size_t pos, bool val);
+int bitmap_set(struct bitmap *bitmap, size_t pos, bool val);
 
 /**
  * @brief Creates new allocator for group of bitmaps
@@ -87,7 +87,7 @@ void bitmap_set(struct bitmap *bitmap, size_t pos, bool val);
  * @param bitmaps_flags reserved for future use, must be zeros
  * @param result_flags reserved for future use, must be zeros
  */
-void bitmap_iterator_newn(struct bitmap_iterator **pit,
+int bitmap_iterator_newn(struct bitmap_iterator **pit,
 			 struct bitmap **bitmaps, size_t bitmaps_size,
 			 int *bitmaps_flags,
 			 int result_flags);

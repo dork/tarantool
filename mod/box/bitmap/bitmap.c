@@ -76,9 +76,14 @@ struct bitmap_page {
 static void bitmap_set_in_page(struct bitmap_page *page, size_t pos, bool val);
 static bool bitmap_get_from_page(struct bitmap_page *page, size_t pos);
 
-void bitmap_new(struct bitmap **pbitmap)
+int bitmap_new(struct bitmap **pbitmap)
 {
 	*pbitmap = calloc(1, sizeof(struct bitmap));
+	if (*pbitmap == NULL) {
+		return -1;
+	}
+
+	return 0;
 }
 
 void bitmap_free(struct bitmap **pbitmap)
@@ -138,17 +143,24 @@ bool bitmap_get_from_page(struct bitmap_page *page, size_t pos)
 	return (page->words[w] & ((bitmap_word_t) 1 << offset)) != 0;
 }
 
-void bitmap_add_page(struct slist_node *node, size_t first_pos)
+static
+int bitmap_add_page(struct slist_node *node, size_t first_pos)
 {
 	/* resize bitmap */
 	struct bitmap_page *page = calloc(1, sizeof(struct bitmap_page));
+	if (page == NULL) {
+		return -1;
+	}
+
 	page->first_pos = first_pos;
 
 	page->node.next = node->next;
 	node->next = &(page->node);
+
+	return 0;
 }
 
-void bitmap_set(struct bitmap *bitmap, size_t pos, bool val)
+int bitmap_set(struct bitmap *bitmap, size_t pos, bool val)
 {
 	struct slist_node *node = &(bitmap->pages);
 	size_t page_first_pos = 0;
@@ -174,12 +186,16 @@ void bitmap_set(struct bitmap *bitmap, size_t pos, bool val)
 	if (node->next == NULL || pos < page_first_pos) {
 		size_t first_pos = pos -
 				(pos % (BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT));
-		bitmap_add_page(node, first_pos);
+		if (bitmap_add_page(node, first_pos) < 0) {
+			return -1;
+		}
 	}
 
 	struct bitmap_page *page = slist_member_of(node->next,
 					struct bitmap_page, node);
 	bitmap_set_in_page(page, pos - page->first_pos, val);
+
+	return 0;
 }
 
 static
@@ -227,26 +243,44 @@ static
 void iter_next_regular(struct slist_node **pnode, size_t *poffset,
 			bitmap_word_t *word);
 
-void bitmap_iterator_newn(struct bitmap_iterator **pit,
+int bitmap_iterator_newn(struct bitmap_iterator **pit,
 			 struct bitmap **bitmaps, size_t bitmaps_size,
 			 int *bitmaps_flags,
 			 int result_flags)
 {
+	int rc = -1;
 	struct bitmap_iterator *it = calloc(1, sizeof(struct bitmap_iterator));
+	if (it == NULL) {
+		goto error_0;
+	}
 
 	it->bitmaps_size = bitmaps_size;
 	it->bitmaps = malloc(sizeof(*it->bitmaps) * bitmaps_size);
+	if (it->bitmaps == NULL) {
+		goto error_1;
+	}
 	memcpy(it->bitmaps, bitmaps,
 		sizeof(*it->bitmaps) * bitmaps_size);
 
 	it->bitmaps_flags = malloc(sizeof(it->bitmaps_flags) * bitmaps_size);
+	if (it->bitmaps == NULL) {
+		goto error_2;
+	}
 	memcpy(it->bitmaps_flags, bitmaps_flags,
 		sizeof(it->bitmaps_flags) * bitmaps_size);
 
 	it->result_flags = result_flags;
 
 	it->pages = malloc(sizeof(*it->pages) * bitmaps_size);
+	if (it->pages == NULL) {
+		goto error_3;
+	}
+
 	it->offsets = malloc(sizeof(*it->offsets) * bitmaps_size);
+	if (it->offsets == NULL) {
+		goto error_4;
+	}
+
 	for (size_t i = 0; i < bitmaps_size; i++) {
 		it->pages[i] = &(bitmaps[i]->pages);
 		it->offsets[i] = 0;
@@ -256,6 +290,22 @@ void bitmap_iterator_newn(struct bitmap_iterator **pit,
 	bitmap_iterator_next_word(it);
 
 	*pit = it;
+
+	return 0;
+
+/* error handling */
+	free(it->offsets);
+error_4:
+	free(it->pages);
+error_3:
+	free(it->bitmaps_flags);
+error_2:
+	free(it->bitmaps);
+error_1:
+	free(it);
+error_0:
+	*pit = NULL;
+	return rc;
 }
 
 void bitmap_iterator_free(struct bitmap_iterator **pit)

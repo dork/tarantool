@@ -24,11 +24,14 @@
  */
 
 #include "index_bitmap.h"
+
+#include <string.h>
+#include <errno.h> // for tnt_raise messages
+
 #include "tuple.h"
 #include "space.h"
 #include "exception.h"
 #include "pickle.h"
-
 #include "bitmap/bitmap.h"
 #include "bitmap/index.h"
 
@@ -135,8 +138,10 @@ iterator_wrapper_free(struct iterator *iterator)
 			break;
 		}
 
-		say_debug("BitmapIndex: new %zu\n", size);
-		bitmap_index_new(&index, size);
+		if (bitmap_index_new(&index, size) < 0) {
+			tnt_raise(SystemError, :"bitmap_index_new: %s",
+				strerror(errno));
+		}
 	}
 	return self;
 }
@@ -236,7 +241,11 @@ iterator_wrapper_free(struct iterator *iterator)
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
 
 	struct bitmap_iterator *it;
-	bitmap_index_iter(index, &it, bitmap_key, bitmap_key_size);
+	if (bitmap_index_iterate(index, &it, bitmap_key, bitmap_key_size) < 0) {
+		tnt_raise(SystemError, :"bitmap_index_iterate: %s",
+			strerror(errno));
+	}
+
 	size_t value = bitmap_iterator_next(it);
 	bitmap_iterator_free(&it);
 
@@ -268,7 +277,11 @@ iterator_wrapper_free(struct iterator *iterator)
 		say_debug("BitmapIndex: remove value = %zu (%p)",
 			  value, old_tuple);
 #endif
-		bitmap_index_remove(index, bitmap_key, bitmap_key_size, value);
+		if (bitmap_index_remove(index,bitmap_key, bitmap_key_size,
+					value) < 0) {
+			tnt_raise(SystemError, :"bitmap_index_remove: %s",
+				strerror(errno));
+		}
 	}
 
 	if (new_tuple != NULL) {
@@ -280,7 +293,11 @@ iterator_wrapper_free(struct iterator *iterator)
 		say_debug("BitmapIndex: insert value = %zu (%p)",
 			  value, new_tuple);
 #endif
-		bitmap_index_insert(index, bitmap_key, bitmap_key_size, value);
+		if (bitmap_index_insert(index,bitmap_key, bitmap_key_size,
+					value) < 0) {
+			tnt_raise(SystemError, :"bitmap_index_insert: %s",
+				strerror(errno));
+		}
 	}
 }
 
@@ -314,8 +331,11 @@ iterator_wrapper_free(struct iterator *iterator)
 	size_t bitmap_key_size = 0;
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
 
-	bitmap_index_iter(index, &(it->bitmap_it),
-			  bitmap_key, bitmap_key_size);
+	if (bitmap_index_iterate(index, &(it->bitmap_it),
+			  bitmap_key, bitmap_key_size) < 0) {
+		tnt_raise(SystemError, :"bitmap_index_iterate: %s",
+			strerror(errno));
+	}
 }
 @end
 

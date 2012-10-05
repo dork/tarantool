@@ -32,11 +32,13 @@
  * @author Roman Tsisyk
  */
 
+#include <errno.h>
+
 #include "bitmap.h"
 
 struct bitmap_index;
 
-void bitmap_index_new(struct bitmap_index **pindex, size_t initial_size);
+int bitmap_index_new(struct bitmap_index **pindex, size_t initial_size);
 void bitmap_index_free(struct bitmap_index **pindex);
 
 /**
@@ -46,7 +48,7 @@ void bitmap_index_free(struct bitmap_index **pindex);
  * @param key_size
  * @param value entry's value
  */
-void bitmap_index_insert(struct bitmap_index *index,
+int bitmap_index_insert(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value);
 
@@ -58,7 +60,7 @@ void bitmap_index_insert(struct bitmap_index *index,
  * @param key_size
  * @param value entry's value
  */
-void bitmap_index_remove(struct bitmap_index *index,
+int bitmap_index_remove(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value);
 
@@ -71,9 +73,9 @@ void bitmap_index_remove(struct bitmap_index *index,
  * @param key_size
  * @see struct bitmap_iterator
  */
-void bitmap_index_iter(struct bitmap_index *index,
-			struct bitmap_iterator **pit,
-			void *key, size_t key_size);
+int bitmap_index_iterate(struct bitmap_index *index,
+			 struct bitmap_iterator **pit,
+			 void *key, size_t key_size);
 
 /**
  * @brief Checks if value present in the index
