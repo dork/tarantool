@@ -126,10 +126,6 @@ int bitmap_index_insert(struct bitmap_index *index,
 		}
 		index->bitmaps = bitmaps;
 		index->bitmaps_size = bitmaps_size_new;
-
-#ifdef DEBUG
-		printf("Resize index to: %zu\n", index->bitmaps_size);
-#endif
 	}
 
 	/* Set bits in bitmaps */

@@ -1,0 +1,12 @@
+	*** test_resize ***
+	*** test_resize: done ***
+ 	*** test_size ***
+	*** test_size: done ***
+ 	*** test_random_pairs ***
+Generating test set... ok
+Inserting pairs... ok
+Checking keys... ok
+Removing random pairs... ok
+Checking keys... ok
+	*** test_random_pairs: done ***
+ 

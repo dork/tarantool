@@ -61,6 +61,17 @@ void make_bitmap_key(void *key, void **bitmap_key, size_t *bitmap_key_size) {
 	u32 size = load_varint32(&key);
 	*bitmap_key = key;
 	*bitmap_key_size = (size_t) size;
+#ifdef DEBUG
+	if (size == 4) {
+		u32 kk;
+		memcpy(&kk, key, size);
+		say_debug("BitmapIndex: make_bitmap_key (u32) %u", kk);
+	} else if(size == 8) {
+		u64 kk;
+		memcpy(&kk, key, size);
+		say_debug("BitmapIndex: make_bitmap_key (u64) %lu", kk);
+	}
+#endif /* DEBUG */
 }
 
 /* wraps bitmap_iterator insed tarantool's iterator */
@@ -118,9 +129,7 @@ iterator_wrapper_free(struct iterator *iterator)
 
 - (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg
 {
-#ifdef DEBUG
-		say_debug("BitmapIndex beginBuild");
-#endif // DEBUG
+	say_info("BitmapIndex: init");
 
 	self = [super init: key_def_arg :space_arg];
 	if (self) {

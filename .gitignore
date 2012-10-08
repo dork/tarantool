@@ -26,6 +26,9 @@ test/unit/rope
 test/unit/rope_avl
 test/unit/rope_basic
 test/unit/rope_stress
+test/unit/bitmap_basic
+test/unit/bitmap_iterator
+test/unit/bitmap_index
 Makefile
 CMakeFiles
 CMakeCache.txt
