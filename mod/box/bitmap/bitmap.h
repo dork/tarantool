@@ -77,6 +77,14 @@ bool bitmap_get(struct bitmap *bitmap, size_t pos);
  */
 int bitmap_set(struct bitmap *bitmap, size_t pos, bool val);
 
+
+/**
+ * @brief Returns the number of bits set to true in this bitmap.
+ * @param bitmap object
+ * @return returns the number of bits set to true in this bitmap.
+ */
+size_t bitmap_cardinality(struct bitmap *bitmap);
+
 /**
  * @brief Creates new allocator for group of bitmaps
  *	Iterator performs logical AND operation on the group of bitmaps and

@@ -192,9 +192,7 @@ iterator_wrapper_free(struct iterator *iterator)
 
 - (size_t) size
 {
-	/* TODO: implement this method */
-	tnt_raise(ClientError, :ER_UNSUPPORTED, "BitmapIndex", "min()");
-	return 0;
+	return bitmap_index_size(index);
 }
 
 - (struct tuple *) min

@@ -64,6 +64,7 @@ struct slist_node {
  */
 struct bitmap {
 	struct slist_node pages;
+	size_t cardinality;
 };
 
 struct bitmap_page {
@@ -117,7 +118,7 @@ bool bitmap_get(struct bitmap *bitmap, size_t pos)
 				BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT;
 
 		/*
-		say_debug("Iter pos=%zu: [%zu, %zu)\n",
+		printf("Iter pos=%zu: [%zu, %zu)\n",
 		       pos, page_first_pos, page_last_pos);
 		*/
 
@@ -193,7 +194,16 @@ int bitmap_set(struct bitmap *bitmap, size_t pos, bool val)
 
 	struct bitmap_page *page = slist_member_of(node->next,
 					struct bitmap_page, node);
-	bitmap_set_in_page(page, pos - page->first_pos, val);
+	if (bitmap_get_from_page(page, pos - page->first_pos) != val) {
+		bitmap_set_in_page(page, pos - page->first_pos, val);
+
+		/* update size counter of the bitmap */
+		if (val) {
+			bitmap->cardinality++;
+		} else {
+			bitmap->cardinality--;
+		}
+	}
 
 	return 0;
 }
@@ -208,6 +218,10 @@ void bitmap_set_in_page(struct bitmap_page *page, size_t pos, bool val)
 	} else {
 		page->words[w] ^= ((bitmap_word_t) 1 << offset);
 	}
+}
+
+size_t bitmap_cardinality(struct bitmap *bitmap) {
+	return bitmap->cardinality;
 }
 
 /* {{{ BitmapIterator *********************************************************/
@@ -345,8 +359,8 @@ size_t word_next_bit(bitmap_word_t *pword)
 size_t bitmap_iterator_next(struct bitmap_iterator *it)
 {
 	/*
-	say_debug("==================\n");
-	say_debug("Next: Word: %lu\n", it->cur_word);
+	printf("==================\n");
+	printf("Next: Word: %lu\n", it->cur_word);
 	*/
 
 	size_t result = SIZE_MAX;
@@ -361,19 +375,18 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 
 		it->cur_pos += BITMAP_WORD_BIT;
 
+		// printf("BitmapIndex: next_word %zu", it->cur_pos);
 		next_word_ret = bitmap_iterator_next_word(it);
 	}
 
-	/*
-	say_debug("==================\n");
-	*/
+
 	return result;
 }
 
 static
 int bitmap_iterator_next_word(struct bitmap_iterator *it)
 {
-	/* say_debug("NextWord: cur_pos1=%zu\n", it->cur_pos); */
+	/* printf("NextWord: cur_pos1=%zu\n", it->cur_pos); */
 
 	it->cur_word = BITMAP_WORD_MAX;
 
@@ -394,17 +407,17 @@ int bitmap_iterator_next_word(struct bitmap_iterator *it)
 		offset_max = it->cur_pos;
 	}
 
-	/* say_debug("NextWord: offset_max=%zu\n", offset_max); */
+	/* printf("NextWord: offset_max=%zu\n", offset_max); */
 	if (offset_max == SIZE_MAX) {
 		/* no more elements */
 		it->cur_pos = SIZE_MAX;
 		return -1;
 	}
 	it->cur_pos = offset_max - (offset_max % BITMAP_WORD_BIT);
-	/* say_debug("NextWord: cur_pos2=%zu\n", it->cur_pos); */
+	/* printf("NextWord: cur_pos2=%zu\n", it->cur_pos); */
 
 	for(size_t i = 0; i < it->bitmaps_size; i++) {
-		bitmap_word_t word;
+		bitmap_word_t word = 0;
 		if (it->offsets[i] < it->cur_pos) {
 			it->offsets[i] = offset_max;
 		}
@@ -414,13 +427,13 @@ int bitmap_iterator_next_word(struct bitmap_iterator *it)
 		it->cur_word &= word;
 
 		/*
-		say_debug("NextWord iter: %zu => offset=%zu, word=%lu\n",
+		printf("NextWord iter: %zu => offset=%zu, word=%lu\n",
 			i, it->offsets[i], word);
 			*/
 	}
 
 	/*
-	say_debug("NextWord result: word=%lu cur_pos=%zu\n",
+	printf("NextWord result: word=%lu cur_pos=%zu\n",
 		it->cur_word, it->cur_pos);
 	*/
 

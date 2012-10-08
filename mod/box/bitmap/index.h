@@ -85,4 +85,11 @@ int bitmap_index_iterate(struct bitmap_index *index,
  */
 bool bitmap_index_contains_value(struct bitmap_index *index, size_t value);
 
+/**
+ * @brief Returns number of entries in this index.
+ * @param index object
+ * @return number of pairs in this index
+ */
+size_t bitmap_index_size(struct bitmap_index *index);
+
 #endif // BITMAP_INDEX_H_INCLUDED

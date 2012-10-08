@@ -31,8 +31,6 @@
 #include <stdio.h>
 #include <limits.h>
 
-#include "say.h"
-
 static
 bool next_bit(char *data, size_t data_len, size_t *pos) {
 	size_t cur_pos = *pos / CHAR_BIT;
@@ -130,7 +128,7 @@ int bitmap_index_insert(struct bitmap_index *index,
 		index->bitmaps_size = bitmaps_size_new;
 
 #ifdef DEBUG
-		say_debug("Resize index to: %zu\n", index->bitmaps_size);
+		printf("Resize index to: %zu\n", index->bitmaps_size);
 #endif
 	}
 
@@ -253,3 +251,9 @@ free_0:
 bool bitmap_index_contains_value(struct bitmap_index *index, size_t value) {
 	return bitmap_get(index->bitmaps[0], value);
 }
+
+size_t bitmap_index_size(struct bitmap_index *index)
+{
+	return bitmap_cardinality(index->bitmaps[0]);
+}
+
