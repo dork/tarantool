@@ -1,6 +1,16 @@
-	*** test_regular ***
+	*** test_empty ***
+	*** test_empty: done ***
+ 	*** test_first ***
+	*** test_first: done ***
+ 	*** test_regular ***
 Generating test set... ok
 Setting bits... ok
 Iterating... ok
 	*** test_regular: done ***
+ 	*** test_op_not1 ***
+	*** test_op_not1: done ***
+ 	*** test_op_not2 ***
+	*** test_op_not2: done ***
+ 	*** test_op_not3 ***
+	*** test_op_not3: done ***
  

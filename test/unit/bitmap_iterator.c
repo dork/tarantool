@@ -10,6 +10,8 @@
 static
 void test_empty()
 {
+	header();
+
 	struct bitmap *bm1;
 	bitmap_new(&bm1);
 	bitmap_set(bm1, 0, 1);
@@ -43,11 +45,15 @@ void test_empty()
 
 	bitmap_free(&bm1);
 	bitmap_free(&bm2);
+
+	footer();
 }
 
 static
 void test_first()
 {
+	header();
+
 	struct bitmap *bm1;
 	bitmap_new(&bm1);
 	bitmap_set(bm1, 0, 1);
@@ -73,6 +79,7 @@ void test_first()
 	bitmap_free(&bm1);
 	bitmap_free(&bm2);
 
+	footer();
 }
 
 static
@@ -157,10 +164,117 @@ void test_regular() {
 	footer();
 }
 
+static
+void test_op_not1() {
+	header();
+
+	size_t big_i = (size_t) 1 << 15;
+	struct bitmap *bm1;
+	bitmap_new(&bm1);
+	bitmap_set(bm1, 0, 1);
+	bitmap_set(bm1, 11, 1);
+	bitmap_set(bm1, 1024, 1);
+
+	struct bitmap *bm2;
+	bitmap_new(&bm2);
+	bitmap_set(bm2, 0, 1);
+	bitmap_set(bm2, 10, 1);
+	bitmap_set(bm2, 11, 1);
+	bitmap_set(bm2, 14, 1);
+	bitmap_set(bm2, big_i, 1);
+
+	struct bitmap *bitmaps[] = {bm1, bm2};
+	int flags[] = { BITMAP_OP_NOT, 0 };
+	int result_flags = 0;
+
+	struct bitmap_iterator *it;
+	bitmap_iterator_newn(&it, bitmaps, 2, (int *) &flags, result_flags);
+
+	size_t result[] = {10, 14, big_i};
+
+	size_t pos;
+	size_t *r = result;
+	while ((pos = bitmap_iterator_next(it)) != SIZE_MAX) {
+		fail_unless (*r == pos);
+		r++;
+	}
+
+	bitmap_iterator_free(&it);
+
+	bitmap_free(&bm1);
+	bitmap_free(&bm2);
+
+	footer();
+}
+
+static
+void test_op_not2() {
+	header();
+
+	struct bitmap_iterator *it;
+	bitmap_iterator_newn(&it, NULL, 0, NULL, BITMAP_OP_NOT);
+
+	for(size_t i = 0; i < 10000; i++) {
+		size_t pos = bitmap_iterator_next(it);
+		fail_unless (pos == i);
+	}
+
+	bitmap_iterator_free(&it);
+
+	footer();
+}
+
+static
+void test_op_not3() {
+	header();
+
+	struct bitmap *bm1;
+	bitmap_new(&bm1);
+	struct bitmap *bm2;
+	bitmap_new(&bm2);
+
+	size_t result[] = {0, 15, 43243, 65536};
+	size_t result_size = 4;
+
+	for (size_t i = 0; i < result_size; i++) {
+		bitmap_set(bm2, result[i], 1);
+	}
+
+	//bitmap_set(bm2, result[result_size - 1] + 1024, 1);
+
+	struct bitmap *bitmaps[] = { bm1, bm2 };
+	int flags[] = { BITMAP_OP_NOT, BITMAP_OP_NOT };
+	int result_flags = BITMAP_OP_NOT;
+
+	struct bitmap_iterator *it;
+	bitmap_iterator_newn(&it, bitmaps, 2, flags, result_flags);
+
+
+	size_t pos = SIZE_MAX;
+	for (size_t i = 0; i < result_size; i++) {
+		pos = bitmap_iterator_next(it);
+
+		fail_unless (pos == result[i]);
+	}
+
+	pos = bitmap_iterator_next(it);
+	fail_unless (pos == SIZE_MAX);
+
+	bitmap_iterator_free(&it);
+
+	bitmap_free(&bm1);
+	bitmap_free(&bm2);
+
+	footer();
+}
+
 int main(int argc, char *argv[])
 {
 	setbuf(stdout, NULL);
 	test_empty();
 	test_first();
 	test_regular();
+	test_op_not1();
+	test_op_not2();
+	test_op_not3();
 }

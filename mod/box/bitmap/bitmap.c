@@ -233,8 +233,8 @@ size_t bitmap_cardinality(struct bitmap *bitmap) {
 struct bitmap_iterator {
 	struct bitmap **bitmaps;
 	size_t bitmaps_size;
-	int *bitmaps_flags;
-	int result_flags;
+	int *bitmaps_ops;
+	int result_ops;
 
 	struct slist_node **pages;
 	size_t *offsets;
@@ -243,24 +243,16 @@ struct bitmap_iterator {
 	size_t cur_pos;
 };
 
-/* Bitmap flags - are not used yet */
-enum {
-	BITMAP_ITER_FLAG_INVERSE = 0x1
-};
-
 static
 int bitmap_iterator_next_word(struct bitmap_iterator *it);
 static
 void iter_next(struct slist_node **pnode, size_t *poffset,
-	int flags, bitmap_word_t *word);
-static
-void iter_next_regular(struct slist_node **pnode, size_t *poffset,
-			bitmap_word_t *word);
+	int bitmap_ops, bitmap_word_t *word);
 
 int bitmap_iterator_newn(struct bitmap_iterator **pit,
 			 struct bitmap **bitmaps, size_t bitmaps_size,
-			 int *bitmaps_flags,
-			 int result_flags)
+			 int *bitmaps_ops,
+			 int result_ops)
 {
 	int rc = -1;
 	struct bitmap_iterator *it = calloc(1, sizeof(struct bitmap_iterator));
@@ -276,14 +268,14 @@ int bitmap_iterator_newn(struct bitmap_iterator **pit,
 	memcpy(it->bitmaps, bitmaps,
 		sizeof(*it->bitmaps) * bitmaps_size);
 
-	it->bitmaps_flags = malloc(sizeof(it->bitmaps_flags) * bitmaps_size);
+	it->bitmaps_ops = malloc(sizeof(it->bitmaps_ops) * bitmaps_size);
 	if (it->bitmaps == NULL) {
 		goto error_2;
 	}
-	memcpy(it->bitmaps_flags, bitmaps_flags,
-		sizeof(it->bitmaps_flags) * bitmaps_size);
+	memcpy(it->bitmaps_ops, bitmaps_ops,
+		sizeof(it->bitmaps_ops) * bitmaps_size);
 
-	it->result_flags = result_flags;
+	it->result_ops = result_ops;
 
 	it->pages = malloc(sizeof(*it->pages) * bitmaps_size);
 	if (it->pages == NULL) {
@@ -312,7 +304,7 @@ int bitmap_iterator_newn(struct bitmap_iterator **pit,
 error_4:
 	free(it->pages);
 error_3:
-	free(it->bitmaps_flags);
+	free(it->bitmaps_ops);
 error_2:
 	free(it->bitmaps);
 error_1:
@@ -328,7 +320,7 @@ void bitmap_iterator_free(struct bitmap_iterator **pit)
 
 	if (it != NULL) {
 		free(it->bitmaps);
-		free(it->bitmaps_flags);
+		free(it->bitmaps_ops);
 		free(it->pages);
 		free(it->offsets);
 
@@ -360,7 +352,7 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 {
 	/*
 	printf("==================\n");
-	printf("Next: Word: %lu\n", it->cur_word);
+	printf("Next: pos=%zu word=%zu\n", it->cur_pos, it->cur_word);
 	*/
 
 	size_t result = SIZE_MAX;
@@ -368,6 +360,7 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 
 	while (next_word_ret == 0) {
 		result = word_next_bit(&(it->cur_word));
+
 		if (result != SIZE_MAX) {
 			result += it->cur_pos;
 			break;
@@ -375,7 +368,6 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 
 		it->cur_pos += BITMAP_WORD_BIT;
 
-		// printf("BitmapIndex: next_word %zu", it->cur_pos);
 		next_word_ret = bitmap_iterator_next_word(it);
 	}
 
@@ -387,13 +379,6 @@ static
 int bitmap_iterator_next_word(struct bitmap_iterator *it)
 {
 	/* printf("NextWord: cur_pos1=%zu\n", it->cur_pos); */
-
-	it->cur_word = BITMAP_WORD_MAX;
-
-	if (it->bitmaps_size == 0) {
-		it->cur_pos = SIZE_MAX;
-		return -1;
-	}
 
 	size_t offset_max = 0;
 
@@ -408,14 +393,21 @@ int bitmap_iterator_next_word(struct bitmap_iterator *it)
 	}
 
 	/* printf("NextWord: offset_max=%zu\n", offset_max); */
-	if (offset_max == SIZE_MAX) {
-		/* no more elements */
-		it->cur_pos = SIZE_MAX;
-		return -1;
+	if (offset_max == SIZE_MAX || it->bitmaps_size == 0) {
+		if (it->result_ops & BITMAP_OP_NOT) {
+			/* just return next bit */
+			it->cur_word = BITMAP_WORD_MAX;
+			return 0;
+		} else {
+			/* no more elements */
+			it->cur_pos = SIZE_MAX;
+			return -1;
+		}
 	}
 	it->cur_pos = offset_max - (offset_max % BITMAP_WORD_BIT);
 	/* printf("NextWord: cur_pos2=%zu\n", it->cur_pos); */
 
+	it->cur_word = BITMAP_WORD_MAX;
 	for(size_t i = 0; i < it->bitmaps_size; i++) {
 		bitmap_word_t word = 0;
 		if (it->offsets[i] < it->cur_pos) {
@@ -423,13 +415,36 @@ int bitmap_iterator_next_word(struct bitmap_iterator *it)
 		}
 
 		iter_next(&it->pages[i], &it->offsets[i],
-			  it->bitmaps_flags[i], &word);
+			  it->bitmaps_ops[i], &word);
 		it->cur_word &= word;
 
 		/*
 		printf("NextWord iter: %zu => offset=%zu, word=%lu\n",
 			i, it->offsets[i], word);
 			*/
+	}
+
+	if (it->result_ops & BITMAP_OP_NOT) {
+		bool not_not_flag = true;
+		/*
+		 * Check for special NOT-NOT case:
+		 * we should stop iterating if both result and all bitmaps
+		 * have OP_NOT flag and more data in bitmaps
+		 */
+		for(size_t i = 0; i < it->bitmaps_size; i++) {
+			if (it->pages[i]->next != NULL) {
+				not_not_flag = false;
+				break;
+			}
+		}
+
+		if (not_not_flag) {
+			it->cur_pos = SIZE_MAX;
+			it->cur_word  = BITMAP_WORD_MIN;
+			return -1;
+		}
+
+		it->cur_word = ~(it->cur_word);
 	}
 
 	/*
@@ -442,18 +457,7 @@ int bitmap_iterator_next_word(struct bitmap_iterator *it)
 
 static
 void iter_next(struct slist_node **pnode, size_t *poffset,
-	int flags, bitmap_word_t *word) {
-
-	if (flags & BITMAP_ITER_FLAG_INVERSE) {
-		/* TODO(roman): implent NOT operation */
-	} else {
-		iter_next_regular(pnode, poffset, word);
-	}
-}
-
-static
-void iter_next_regular(struct slist_node **pnode, size_t *poffset,
-			bitmap_word_t *word) {
+	int bitmap_ops, bitmap_word_t *word) {
 	struct slist_node *node = *pnode;
 	for(; node->next != NULL; node = node->next) {
 		struct bitmap_page *page = slist_member_of(node->next,
@@ -466,7 +470,12 @@ void iter_next_regular(struct slist_node **pnode, size_t *poffset,
 		if (*poffset < page_first_pos) {
 			*poffset = page_first_pos;
 			*pnode = node;
-			*word = BITMAP_WORD_MIN;
+
+			if (bitmap_ops & BITMAP_OP_NOT) {
+				*word = BITMAP_WORD_MAX;
+			} else {
+				*word = BITMAP_WORD_MIN;
+			}
 			return;
 		}
 
@@ -475,17 +484,38 @@ void iter_next_regular(struct slist_node **pnode, size_t *poffset,
 		}
 
 		size_t w = (*poffset - page_first_pos) / BITMAP_WORD_BIT;
-		*word = page->words[w];
+		if (bitmap_ops & BITMAP_OP_NOT) {
+			*word = ~(page->words[w]);
+		} else {
+			*word = page->words[w];
+		}
 		*pnode = node;
 		(*poffset)++;
-		/* *poffset = page_first_pos + (w+1) * BITMAP_WORD_BIT; */
+		/*
+		 * TODO(roman):
+		 * Check *poffset = page_first_pos + (w+1) * BITMAP_WORD_BIT;
+		 */
 
 		return;
 	}
 
-	/* not more data in this bitmap */
-	*poffset = SIZE_MAX;
-	*word = BITMAP_WORD_MIN;
+	/*
+	 * No more data in the bitmap
+	 */
+
+	/* update page node pointer */
+	*pnode = node;
+
+	if ((bitmap_ops & BITMAP_OP_NOT)) {
+		/* no more words - return all ones */
+		*word = BITMAP_WORD_MAX;
+		/* TODO(roman): (*poffset) += BITMAP_WORD_BIT ? */
+		(*poffset)++;
+	} else {
+		/* no more words in bitmap */
+		*poffset = SIZE_MAX;
+		*word = BITMAP_WORD_MIN;
+	}
 
 	return;
 }

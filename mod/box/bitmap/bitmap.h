@@ -86,19 +86,29 @@ int bitmap_set(struct bitmap *bitmap, size_t pos, bool val);
 size_t bitmap_cardinality(struct bitmap *bitmap);
 
 /**
+ * @brief BitmapOp is used as parameter to bitmap_iterator_newn function.
+ * @see bitmap_iterator_newn
+ */
+enum BitmapOp {
+	/* inverse (apply bitwise NOT) bits in the bitmap  */
+	BITMAP_OP_NULL = 0,
+	BITMAP_OP_NOT = 0x1
+};
+
+/**
  * @brief Creates new allocator for group of bitmaps
  *	Iterator performs logical AND operation on the group of bitmaps and
  *	returns next position where bit in resulting bitmap is set
  * @param pit object
  * @param bitmaps list of bitmaps
  * @param bitmaps_size size of bitmaps parameters
- * @param bitmaps_flags reserved for future use, must be zeros
- * @param result_flags reserved for future use, must be zeros
+ * @param bitmaps_ops operations that applied to each bitmap before ANDing
+ * @param result_ops operations that applied to result bitmap
  */
 int bitmap_iterator_newn(struct bitmap_iterator **pit,
 			 struct bitmap **bitmaps, size_t bitmaps_size,
-			 int *bitmaps_flags,
-			 int result_flags);
+			 int *bitmaps_ops,
+			 int result_ops);
 
 
 /**
