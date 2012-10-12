@@ -65,19 +65,17 @@ int bitmap_index_remove(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value);
 
+
 enum BitmapIndexMatchType {
-	BITMAP_INDEX_MATCH_EXACT = 0,
+	/* tuple_set IS SUPERSET of request_set,
+	 * i.e. tuple_set contains all bits from request_set */
+	BITMAP_INDEX_MATCH_CONTAINS = 0,
 
-	BITMAP_INDEX_MATCH_AND   = 1,
-	BITMAP_INDEX_MATCH_NAND  = 2,
+	/* tuple_set INTERSECTS with request_set */
+	BITMAP_INDEX_MATCH_INTERSECTS = 1,
 
-	BITMAP_INDEX_MATCH_OR    = 3,
-	BITMAP_INDEX_MATCH_NOR   = 4
-
-	/*
-	BITMAP_INDEX_MATCH_XOR,
-	BITMAP_INDEX_MATCH_XNOR
-	*/
+	/* tuple_set EQUALS request_set */
+	BITMAP_INDEX_MATCH_EQUALS = 2
 };
 
 /**

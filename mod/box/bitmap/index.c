@@ -30,29 +30,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <limits.h>
+#include <assert.h>
 
-bool next_bit(const char *data, size_t data_len, size_t *pos) {
-	size_t cur_pos = *pos / CHAR_BIT;
-	size_t cur_offset = *pos % CHAR_BIT;
-
-	while (cur_pos < data_len) {
-		char c = data[cur_pos] >> cur_offset;
-		if (c & 0x1) {
-			*pos = cur_pos * CHAR_BIT + cur_offset;
-			return true;
-		}
-
-		cur_offset++;
-		if (cur_offset >= CHAR_BIT) {
-			cur_offset = 0;
-			cur_pos++;
-			continue;
-		}
-	}
-
-	*pos = SIZE_MAX;
-	return false;
-}
+#include "bitmap_p.h"
 
 struct bitmap_index {
 	struct bitmap **bitmaps;
@@ -129,7 +109,7 @@ int bitmap_index_insert(struct bitmap_index *index,
 
 	/* Set bits in bitmaps */
 	size_t pos = 0;
-	while(next_bit(key, key_size, &pos)) {
+	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
 		if (index->bitmaps[b] == NULL) {
 			if (bitmap_new(&index->bitmaps[b]) < 0) {
@@ -160,7 +140,7 @@ int bitmap_index_remove(struct bitmap_index *index,
 	}
 
 	size_t pos = 0;
-	while(next_bit(key, key_size, &pos)) {
+	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
 		if (b >= index->bitmaps_size) {
 			break;
@@ -185,14 +165,93 @@ int bitmap_index_remove(struct bitmap_index *index,
 }
 
 static
-int bitmap_index_iterate_and(struct bitmap_index *index,
-			      struct bitmap_iterator **pit,
-			      void *key, size_t key_size)
+int bitmap_index_iterate_equals(struct bitmap_index *index,
+			       struct bitmap_iterator **pit,
+			       void *key, size_t key_size)
+{
+	int rc = 0;
+
+	size_t key_bits = (key_size * CHAR_BIT);
+	size_t elements_size = 1;
+
+	for (size_t pos = 0; pos < key_bits; pos++) {
+		size_t b = pos + 1;
+		if (test_bit(key, pos)) {
+			if (index->bitmaps[b] == NULL) {
+				elements_size = 0;
+				break;
+			}
+
+			elements_size++;
+		} else {
+			if (index->bitmaps[b] == NULL) {
+				continue;
+			}
+			elements_size++;
+		}
+	}
+
+	struct bitmap_iterator_group *set;
+	size_t set_size = sizeof(*set) + sizeof(*(set->elements)) *
+			elements_size;
+	set = calloc(1, set_size);
+	if (!set) {
+		return -1;
+	}
+
+	set->reduce_op = BITMAP_OP_AND;
+	set->post_op = BITMAP_OP_NULL;
+	set->elements_size = 0;
+
+	if (elements_size == 0) {
+		goto exit;
+	}
+
+	set->elements[set->elements_size].bitmap = index->bitmaps[0];
+	set->elements[set->elements_size].pre_op = BITMAP_OP_NULL;
+	set->elements_size++;
+
+	for (size_t pos = 0; pos < key_size * CHAR_BIT; pos++) {
+		size_t b = pos + 1;
+		if (test_bit(key, pos)) {
+			assert (index->bitmaps[b] != NULL);
+
+			set->elements[set->elements_size].bitmap =
+					index->bitmaps[b];
+			set->elements[set->elements_size].pre_op =
+					BITMAP_OP_NULL;
+			set->elements_size++;
+		} else {
+			if (index->bitmaps[b] == NULL) {
+				continue;
+			}
+
+			set->elements[set->elements_size].bitmap =
+					index->bitmaps[b];
+			set->elements[set->elements_size].pre_op =
+					BITMAP_OP_NOT;
+			set->elements_size++;
+		}
+	}
+
+exit:
+	assert(set->elements_size == elements_size);
+
+	rc = bitmap_iterator_newgroup(pit, &set, 1);
+	free(set);
+
+	return rc;
+}
+
+static
+int bitmap_index_iterate_contains(struct bitmap_index *index,
+				     struct bitmap_iterator **pit,
+				     void *key, size_t key_size)
 {
 	size_t used_bitmaps_count = 1;
 
 	size_t pos = 0;
-	while(next_bit(key, key_size, &pos)) {
+	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
 		if (index->bitmaps[b] == NULL || b >= index->bitmaps_size) {
 			/* do not have bitmap for this bit */
@@ -223,7 +282,7 @@ int bitmap_index_iterate_and(struct bitmap_index *index,
 		b++;
 
 		pos = 0;
-		while(next_bit(key, key_size, &pos)) {
+		while(find_next_set_bit(key, key_size, &pos) == 0) {
 			set->elements[b].bitmap = index->bitmaps[pos + 1];
 			set->elements[b].pre_op = BITMAP_OP_NULL;
 			b++;
@@ -239,6 +298,64 @@ int bitmap_index_iterate_and(struct bitmap_index *index,
 	return rc;
 }
 
+static
+int bitmap_index_iterate_intersects(struct bitmap_index *index,
+				    struct bitmap_iterator **pit,
+				    void *key, size_t key_size)
+{
+	int rc = 0;
+
+	struct bitmap_iterator_group *set1;
+	size_t set_size1 = sizeof(*set1) + sizeof(*(set1->elements)) *
+			(index->bitmaps_size - 1);
+	set1 = calloc(1, set_size1);
+	if (!set1) {
+		rc = -1;
+		goto error_1;
+	}
+
+	set1->reduce_op = BITMAP_OP_OR;
+	set1->post_op = BITMAP_OP_NULL;
+	set1->elements_size = 0;
+
+	for (size_t pos = 0;
+	     find_next_set_bit(key, key_size, &pos) == 0;
+	     pos++) {
+		size_t b = pos + 1;
+		if (index->bitmaps[b] == NULL) {
+			/* do not have bitmap for this bit */
+			continue;
+		}
+		set1->elements[set1->elements_size].bitmap = index->bitmaps[b];
+		set1->elements[set1->elements_size].pre_op = BITMAP_OP_NULL;
+		set1->elements_size++;
+	}
+
+	struct bitmap_iterator_group *set2;
+	size_t set_size2 = sizeof(*set2) + sizeof(*(set2->elements));
+	set2 = calloc(1, set_size2);
+	if (!set2) {
+		rc = -1;
+		goto error_2;
+	}
+
+	set2->reduce_op = BITMAP_OP_AND;
+	set2->post_op = BITMAP_OP_NULL;
+	set2->elements_size = 1;
+	set2->elements[0].bitmap = index->bitmaps[0];
+	set2->elements[0].pre_op = BITMAP_OP_NULL;
+
+	struct bitmap_iterator_group *groups[] = { set1, set2 };
+
+	rc = bitmap_iterator_newgroup(pit, groups, 2);
+
+	free(set2);
+error_2:
+	free(set1);
+error_1:
+	return rc;
+}
+
 int bitmap_index_iterate(struct bitmap_index *index,
 			struct bitmap_iterator **pit,
 			void *key, size_t key_size,
@@ -246,8 +363,12 @@ int bitmap_index_iterate(struct bitmap_index *index,
 
 
 	switch((enum BitmapIndexMatchType) match_type) {
-	case BITMAP_INDEX_MATCH_AND:
-		return bitmap_index_iterate_and(index, pit, key, key_size);
+	case BITMAP_INDEX_MATCH_EQUALS:
+		return bitmap_index_iterate_equals(index, pit, key, key_size);
+	case BITMAP_INDEX_MATCH_CONTAINS:
+		return bitmap_index_iterate_contains(index, pit, key, key_size);
+	case BITMAP_INDEX_MATCH_INTERSECTS:
+		return bitmap_index_iterate_intersects(index, pit, key, key_size);
 	default:
 		/* not implemented */
 		errno = ENOTSUP;

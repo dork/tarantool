@@ -500,6 +500,7 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 
 	*pcur_pos = next_pos;
 
+	*pword = word_zeros();
 	for(size_t b = 0; b < group->elements_size; b++) {
 		bitmap_word_t tmp_word = word_zeros();
 

@@ -38,6 +38,41 @@
 /** Number of bits in one word */
 const size_t BITMAP_WORD_BIT = sizeof(bitmap_word_t) * CHAR_BIT;
 
+bool test_bit(const void *data, size_t pos)
+{
+	const char *cdata = (const char *) data;
+
+	const size_t cur_pos = pos / CHAR_BIT;
+	const size_t cur_offset = pos % CHAR_BIT;
+
+	return (cdata[cur_pos] >> cur_offset) & 0x1;
+}
+
+int find_next_set_bit(const void *data, size_t data_size, size_t *ppos) {
+	const char *cdata = (const char *) data;
+
+	size_t cur_pos = *ppos / CHAR_BIT;
+	size_t cur_offset = *ppos % CHAR_BIT;
+
+	while (cur_pos < data_size) {
+		char c = cdata[cur_pos] >> cur_offset;
+		if (c & 0x1) {
+			*ppos = cur_pos * CHAR_BIT + cur_offset;
+			return 0;
+		}
+
+		cur_offset++;
+		if (cur_offset >= CHAR_BIT) {
+			cur_offset = 0;
+			cur_pos++;
+			continue;
+		}
+	}
+
+	*ppos = SIZE_MAX;
+	return -1;
+}
+
 /* bitmap_set/bitmap_get helpers */
 static void bitmap_set_in_page(struct bitmap_page *page, size_t pos, bool val);
 static bool bitmap_get_from_page(struct bitmap_page *page, size_t pos);
@@ -189,4 +224,32 @@ size_t bitmap_cardinality(struct bitmap *bitmap) {
 	return bitmap->cardinality;
 }
 
+
+#ifdef DEBUG
+void bitmap_debug_print(struct bitmap *bitmap) {
+	printf("Bitmap {\n");
+	struct slist_node *node = &(bitmap->pages);
+	for(; node->next != NULL; node = node->next) {
+		struct bitmap_page *page = slist_member_of(node->next,
+						struct bitmap_page, node);
+
+		size_t page_first_pos = page->first_pos;
+		size_t page_last_pos = page_first_pos +
+				BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT;
+
+		printf("    [%zu, %zu) ", page_first_pos, page_last_pos);
+
+		size_t size = BITMAP_WORDS_PER_PAGE * sizeof(bitmap_word_t);
+		size_t pos = 0;
+		while (find_next_set_bit(page->words, size, &pos) != 0) {
+			printf("%zu ", page_first_pos + pos);
+			pos++;
+		}
+
+		printf("\n");
+	}
+
+	printf("}\n");
+}
+#endif /* def DEBUG */
 /* }}} */

@@ -87,6 +87,12 @@ bitmap_word_t word_xnor(bitmap_word_t word1, bitmap_word_t word2) {
 	return ~(word1 ^ word2);
 }
 
+/*
+ * General-purpose bit-manipulation functions
+ */
+bool test_bit(const void *data, size_t pos);
+int find_next_set_bit(const void *data, size_t data_size, size_t *ppos);
+
 /* TODO(roman): split slist from this file */
 
 /**
@@ -112,5 +118,9 @@ struct bitmap_page {
 	size_t first_pos;
 	bitmap_word_t words[BITMAP_WORDS_PER_PAGE];
 };
+
+#ifdef DEBUG
+void bitmap_debug_print(struct bitmap *bitmap);
+#endif /* def DEBUG */
 
 #endif /* BITMAP_BITMAP_P_H_INCLUDED */
