@@ -541,12 +541,17 @@ void next_word_in_bitmap(struct slist_node **pnode, size_t *poffset,
 		       page_first_pos, page_last_pos);
 		*/
 		if (*poffset < page_first_pos) {
-			*poffset = page_first_pos;
 			*pnode = node;
 
 			if (bitmap_ops == BITMAP_OP_NOT) {
+				/*
+				 * Return word_ones() until
+				 * offset < page->first_pos.
+				 * Offset must not be changed!
+				 */
 				*word = word_ones();
 			} else {
+				*poffset = page_first_pos;
 				*word = word_zeros();
 			}
 
