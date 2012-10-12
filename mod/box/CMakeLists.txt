@@ -40,4 +40,6 @@ set_source_files_properties(memcached.m
 
 tarantool_module("box" tuple.m index.m tree.m index_bitmap.m space.m port.m request.m
     txn.m box.m box.lua.c box_lua.m memcached.m memcached-grammar.m
-    box_lua_uuid.m bitmap/index.h bitmap/index.c bitmap/bitmap.h bitmap/bitmap.c)
+    box_lua_uuid.m bitmap/index.h bitmap/index.c bitmap/bitmap.h bitmap/bitmap.c
+    bitmap/bitmap_p.h bitmap/iterator.c bitmap/iterator.h
+)

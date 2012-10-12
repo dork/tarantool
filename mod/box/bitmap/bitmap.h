@@ -42,14 +42,6 @@
 struct bitmap;
 
 /**
- * BitmapIterator object
- * Iterator can be used for iterating over bits in a bitmap of group of bitmaps.
- */
-struct bitmap_iterator;
-
-/* please use struct pointers everywhere */
-
-/**
  * @brief Allocates and construct new bitmap and sets value of *pbitmap.
  * @param pbitmap
  */
@@ -103,59 +95,5 @@ enum BitmapBinaryOp {
 	BITMAP_OP_XOR   = 0x5 << 8,
 	BITMAP_OP_XNOR  = 0x6 << 8
 };
-
-struct bitmap_iterator_group {
-	/** operation to combine (reduce) bitmaps during iterations **/
-	enum BitmapBinaryOp reduce_op; /* only AND, OR, XOR supported */
-	/** operation to apply after combining */
-	enum BitmapUnaryOp post_op; /* not supported yet */
-	/** number of elements on this group */
-	size_t elements_size;
-	/** elements */
-	struct bitmap_iterator_group_element {
-		/** operation to apply to source bitmap before reducing */
-		enum BitmapUnaryOp pre_op;
-		/** source bitmap */
-		struct bitmap *bitmap;
-	} elements[];
-};
-
-int bitmap_iterator_new(struct bitmap_iterator **pit,
-			struct bitmap *group,
-			enum BitmapUnaryOp pre_op);
-
-/**
- * @brief Creates new allocator for group of bitmaps
- *	Iterator performs logical AND operation on the group of bitmaps and
- *	returns next position where bit in resulting bitmap is set
- * @param pit object
- * @param bitmaps list of bitmaps
- * @param bitmaps_size size of bitmaps parameters
- * @param bitmaps_ops operations that applied to each bitmap before ANDing
- * @param result_ops operations that applied to result bitmap
- */
-__attribute__ ((deprecated))
-int bitmap_iterator_newn(struct bitmap_iterator **pit,
-			 struct bitmap **bitmaps, size_t bitmaps_size,
-			 int *bitmaps_ops,
-			 int result_ops);
-
-int bitmap_iterator_newgroup(struct bitmap_iterator **pit,
-			struct bitmap_iterator_group **groups,
-			size_t groups_size);
-
-/**
- * @brief Destroys iterator
- * @param pit objects
- */
-void bitmap_iterator_free(struct bitmap_iterator **pit);
-
-/**
- * @brief Iterates over the bitmap
- * @see bitmap_iterator_newn
- * @param it object
- * @return offset or SIZE_MAX if no more bits in the bitmap group
- */
-size_t bitmap_iterator_next(struct bitmap_iterator *it);
 
 #endif // BITMAP_BITMAP_H_INCLUDED

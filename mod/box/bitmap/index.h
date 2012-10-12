@@ -35,6 +35,7 @@
 #include <errno.h>
 
 #include "bitmap.h"
+#include "iterator.h"
 
 struct bitmap_index;
 

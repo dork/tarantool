@@ -9,6 +9,8 @@ add_executable(rope rope.c ${CMAKE_SOURCE_DIR}/src/rope.c)
 add_library(bitmap STATIC
     ${CMAKE_SOURCE_DIR}/mod/box/bitmap/bitmap.h
     ${CMAKE_SOURCE_DIR}/mod/box/bitmap/bitmap.c
+    ${CMAKE_SOURCE_DIR}/mod/box/bitmap/iterator.h
+    ${CMAKE_SOURCE_DIR}/mod/box/bitmap/iterator.c
     ${CMAKE_SOURCE_DIR}/mod/box/bitmap/index.h
     ${CMAKE_SOURCE_DIR}/mod/box/bitmap/index.c
 )
