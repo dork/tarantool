@@ -248,7 +248,8 @@ iterator_wrapper_free(struct iterator *iterator)
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
 
 	struct bitmap_iterator *it;
-	if (bitmap_index_iterate(index, &it, bitmap_key, bitmap_key_size) < 0) {
+	if (bitmap_index_iterate(index, &it, bitmap_key, bitmap_key_size,
+				 BITMAP_INDEX_MATCH_AND) < 0) {
 		tnt_raise(SystemError, :"bitmap_index_iterate: %s",
 			strerror(errno));
 	}
@@ -339,7 +340,8 @@ iterator_wrapper_free(struct iterator *iterator)
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
 
 	if (bitmap_index_iterate(index, &(it->bitmap_it),
-			  bitmap_key, bitmap_key_size) < 0) {
+				 bitmap_key, bitmap_key_size,
+				 BITMAP_INDEX_MATCH_AND) < 0) {
 		tnt_raise(SystemError, :"bitmap_index_iterate: %s",
 			strerror(errno));
 	}

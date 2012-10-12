@@ -89,11 +89,40 @@ size_t bitmap_cardinality(struct bitmap *bitmap);
  * @brief BitmapOp is used as parameter to bitmap_iterator_newn function.
  * @see bitmap_iterator_newn
  */
-enum BitmapOp {
-	/* inverse (apply bitwise NOT) bits in the bitmap  */
+enum BitmapUnaryOp {
 	BITMAP_OP_NULL = 0,
-	BITMAP_OP_NOT = 0x1
+	/* inverse (apply bitwise NOT) bits in the bitmap  */
+	BITMAP_OP_NOT   = 0x1
 };
+
+enum BitmapBinaryOp {
+	BITMAP_OP_AND   = 0x1 << 8,
+	BITMAP_OP_NAND  = 0x2 << 8,
+	BITMAP_OP_OR    = 0x3 << 8,
+	BITMAP_OP_NOR   = 0x4 << 8,
+	BITMAP_OP_XOR   = 0x5 << 8,
+	BITMAP_OP_XNOR  = 0x6 << 8
+};
+
+struct bitmap_iterator_group {
+	/** operation to combine (reduce) bitmaps during iterations **/
+	enum BitmapBinaryOp reduce_op; /* only AND, OR, XOR supported */
+	/** operation to apply after combining */
+	enum BitmapUnaryOp post_op; /* not supported yet */
+	/** number of elements on this group */
+	size_t elements_size;
+	/** elements */
+	struct bitmap_iterator_group_element {
+		/** operation to apply to source bitmap before reducing */
+		enum BitmapUnaryOp pre_op;
+		/** source bitmap */
+		struct bitmap *bitmap;
+	} elements[];
+};
+
+int bitmap_iterator_new(struct bitmap_iterator **pit,
+			struct bitmap *group,
+			enum BitmapUnaryOp pre_op);
 
 /**
  * @brief Creates new allocator for group of bitmaps
@@ -105,11 +134,15 @@ enum BitmapOp {
  * @param bitmaps_ops operations that applied to each bitmap before ANDing
  * @param result_ops operations that applied to result bitmap
  */
+__attribute__ ((deprecated))
 int bitmap_iterator_newn(struct bitmap_iterator **pit,
 			 struct bitmap **bitmaps, size_t bitmaps_size,
 			 int *bitmaps_ops,
 			 int result_ops);
 
+int bitmap_iterator_newgroup(struct bitmap_iterator **pit,
+			struct bitmap_iterator_group **groups,
+			size_t groups_size);
 
 /**
  * @brief Destroys iterator

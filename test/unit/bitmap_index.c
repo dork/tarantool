@@ -22,7 +22,8 @@ void test_resize()
 
 	struct bitmap_iterator *it;
 
-	bitmap_index_iterate(index, &it, &key, sizeof(key));
+	bitmap_index_iterate(index, &it, &key, sizeof(key),
+			     BITMAP_INDEX_MATCH_AND);
 
 	fail_unless(bitmap_iterator_next(it) == value);
 	fail_unless(bitmap_iterator_next(it) == SIZE_MAX);
@@ -70,7 +71,8 @@ void check_keys(struct bitmap_index *index,
 		}
 
 		struct bitmap_iterator *it;
-		bitmap_index_iterate(index, &it, &(keys[i]), sizeof(keys[i]));
+		bitmap_index_iterate(index, &it, &(keys[i]), sizeof(keys[i]),
+				     BITMAP_INDEX_MATCH_AND);
 
 		size_t pos;
 

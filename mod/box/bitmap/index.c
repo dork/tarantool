@@ -31,8 +31,7 @@
 #include <stdio.h>
 #include <limits.h>
 
-static
-bool next_bit(char *data, size_t data_len, size_t *pos) {
+bool next_bit(const char *data, size_t data_len, size_t *pos) {
 	size_t cur_pos = *pos / CHAR_BIT;
 	size_t cur_offset = *pos % CHAR_BIT;
 
@@ -185,63 +184,75 @@ int bitmap_index_remove(struct bitmap_index *index,
 	return 0;
 }
 
-int bitmap_index_iterate(struct bitmap_index *index,
-			struct bitmap_iterator **pit,
-			void *key, size_t key_size) {
-	int rc = -1;
-	*pit = NULL;
+static
+int bitmap_index_iterate_and(struct bitmap_index *index,
+			      struct bitmap_iterator **pit,
+			      void *key, size_t key_size)
+{
+	size_t used_bitmaps_count = 1;
 
-	struct bitmap **used_bitmaps = calloc(index->bitmaps_size,
-					sizeof(*used_bitmaps));
-	if (used_bitmaps == NULL) {
-		goto free_0;
+	size_t pos = 0;
+	while(next_bit(key, key_size, &pos)) {
+		size_t b = pos + 1;
+		if (index->bitmaps[b] == NULL || b >= index->bitmaps_size) {
+			/* do not have bitmap for this bit */
+			used_bitmaps_count = 0;
+			break;
+		}
+
+		used_bitmaps_count++;
+		pos++;
 	}
 
-	int *used_bitmap_flags = calloc(index->bitmaps_size,
-					sizeof(*used_bitmap_flags));
-	if (used_bitmap_flags == NULL) {
-		goto free_1;
+	struct bitmap_iterator_group *set;
+	size_t set_size = sizeof(*set) + sizeof(*(set->elements)) *
+			used_bitmaps_count;
+	set = calloc(1, set_size);
+	if (!set) {
+		return -1;
 	}
 
-	size_t used_bitmaps_size = 0;
-	int result_flags = 0;
+	set->reduce_op = BITMAP_OP_AND;
+	set->post_op = BITMAP_OP_NULL;
+	set->elements_size = used_bitmaps_count;
 
-	used_bitmaps[0] = index->bitmaps[0];
-	used_bitmaps_size++;
+	size_t b = 0;
+	if (used_bitmaps_count > 0) {
+		set->elements[b].bitmap = index->bitmaps[0];
+		set->elements[b].pre_op = BITMAP_OP_NULL;
+		b++;
 
-	size_t bitmaps_size_needed = 1 + key_size * CHAR_BIT;
-	if (bitmaps_size_needed <= index->bitmaps_size) {
-		size_t pos = 0;
+		pos = 0;
 		while(next_bit(key, key_size, &pos)) {
-			size_t b = pos + 1;
-			if (index->bitmaps[b] == NULL) {
-				/* do not have bitmap for this bit */
-				used_bitmaps_size = 0;
-				break;
-			}
-
-			used_bitmaps[used_bitmaps_size++] = index->bitmaps[b];
+			set->elements[b].bitmap = index->bitmaps[pos + 1];
+			set->elements[b].pre_op = BITMAP_OP_NULL;
+			b++;
 
 			pos++;
 		}
-	} else {
-		used_bitmaps_size = 0;
 	}
 
-	if (bitmap_iterator_newn(pit, used_bitmaps, used_bitmaps_size,
-			used_bitmap_flags, result_flags) < 0) {
-		goto free_1;
-	}
+	int rc = bitmap_iterator_newgroup(pit, &set, 1);
 
-	rc = 0;
-
-
-free_1:
-	free(used_bitmap_flags);
-free_0:
-	free(used_bitmaps);
+	free(set);
 
 	return rc;
+}
+
+int bitmap_index_iterate(struct bitmap_index *index,
+			struct bitmap_iterator **pit,
+			void *key, size_t key_size,
+			int match_type) {
+
+
+	switch((enum BitmapIndexMatchType) match_type) {
+	case BITMAP_INDEX_MATCH_AND:
+		return bitmap_index_iterate_and(index, pit, key, key_size);
+	default:
+		/* not implemented */
+		errno = ENOTSUP;
+		return -2;
+	}
 }
 
 bool bitmap_index_contains_value(struct bitmap_index *index, size_t value) {

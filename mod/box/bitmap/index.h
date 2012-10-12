@@ -56,13 +56,28 @@ int bitmap_index_insert(struct bitmap_index *index,
 /**
  * @brief Removes entry from the index
  * @param index object
- * @param key entry's key
+ * @param key entry's
  * @param key_size
  * @param value entry's value
  */
 int bitmap_index_remove(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value);
+
+enum BitmapIndexMatchType {
+	BITMAP_INDEX_MATCH_EXACT = 0,
+
+	BITMAP_INDEX_MATCH_AND   = 1,
+	BITMAP_INDEX_MATCH_NAND  = 2,
+
+	BITMAP_INDEX_MATCH_OR    = 3,
+	BITMAP_INDEX_MATCH_NOR   = 4
+
+	/*
+	BITMAP_INDEX_MATCH_XOR,
+	BITMAP_INDEX_MATCH_XNOR
+	*/
+};
 
 /**
  * @brief Creates new iterator to iterate over index values
@@ -75,7 +90,8 @@ int bitmap_index_remove(struct bitmap_index *index,
  */
 int bitmap_index_iterate(struct bitmap_index *index,
 			 struct bitmap_iterator **pit,
-			 void *key, size_t key_size);
+			 void *key, size_t key_size,
+			 int match_type);
 
 /**
  * @brief Checks if value present in the index
