@@ -322,8 +322,16 @@ iterator_wrapper_free(struct iterator *iterator)
 {
 	(void) iterator;
 	(void) type;
-	tnt_raise(ClientError, :ER_UNSUPPORTED,
-		  "BitmapIndex", "initIterator()");
+
+	if (type != ITER_FORWARD) {
+		tnt_raise(ClientError, :ER_UNSUPPORTED, "BitmapIndex",
+			  "start value needed");
+	}
+
+	u8 key[4];
+	int part_count = 1;
+	save_varint32(key, 0);
+	[self initIteratorUnsafe: iterator :type :key :part_count];
 }
 
 - (void) initIteratorUnsafe: (struct iterator *) iterator :(enum iterator_type) type
@@ -331,9 +339,17 @@ iterator_wrapper_free(struct iterator *iterator)
 {
 	(void) part_count;
 
-	if (type == ITER_REVERSE) {
+	enum bitmap_index_match_type match_type;
+	switch (type) {
+	case ITER_FORWARD:
+		match_type = BITMAP_INDEX_MATCH_EQUALS; break;
+	case ITER_BITSET_CONTAINS:
+		match_type = BITMAP_INDEX_MATCH_CONTAINS; break;
+	case ITER_BITSET_INTERSECTS:
+		match_type = BITMAP_INDEX_MATCH_INTERSECTS; break;
+	default:
 		tnt_raise(ClientError, :ER_UNSUPPORTED, "BitmapIndex",
-			  "reverse iteration");
+			  "iterator type");
 	}
 
 	assert(iterator->next == iterator_wrapper_next);
@@ -345,7 +361,7 @@ iterator_wrapper_free(struct iterator *iterator)
 
 	if (bitmap_index_iterate(index, &(it->bitmap_it),
 				 bitmap_key, bitmap_key_size,
-				 BITMAP_INDEX_MATCH_EQUALS) < 0) {
+				 match_type) < 0) {
 		tnt_raise(SystemError, :"bitmap_index_iterate: %s",
 			strerror(errno));
 	}

@@ -47,7 +47,9 @@ extern const char *field_data_type_strs[];
 enum index_type { HASH, TREE, BITMAP, index_type_MAX };
 extern const char *index_type_strs[];
 
-enum iterator_type { ITER_FORWARD, ITER_REVERSE };
+enum iterator_type { ITER_FORWARD, ITER_REVERSE, /* exact match */
+		     ITER_BITSET_CONTAINS, ITER_BITSET_INTERSECTS
+		   };
 
 /** Descriptor of a single part in a multipart key. */
 struct key_part {
