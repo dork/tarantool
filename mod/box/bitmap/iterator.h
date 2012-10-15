@@ -93,10 +93,13 @@ int bitmap_iterator_newn(struct bitmap_iterator **pit,
  * producing temporary bitmaps. At first stage, element.pre_op is applied to
  * each bitmap of the group. Then reduce_op is cumulatively applied to the items
  * from left to right (like foldl), so as to reduce the group to a single value.
- * Example: group1 = b1 & ~b2 & b3 & ~b4. After that group.post_op is applied
+ * Example: group1 = b1 || ~b2 || b3 || ~b4. After that group.post_op is applied
  * on the result after that. On next step, iterator combines results from all
  * groups using binary AND operation.
  * Example: (group1) & ~(group2) & ~(group3)
+ * Due to fact that every propositional formula can be represented using CNF,
+ * you can construct any logical expression you want using scheme above.
+ * @link http://en.wikipedia.org/wiki/Conjunctive_normal_form
  *
  * Please note that reduce operations on both cases are left-associate.
  *
