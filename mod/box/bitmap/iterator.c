@@ -55,7 +55,7 @@ struct bitmap_iterator {
 struct bitmap_iterator_state {
 	int data; // reserved for future use
 	struct bitmap_iterator_state_element {
-		struct slist_node *page;
+		struct bitmap_page *page;
 		size_t offset;
 	} elements[];
 };
@@ -67,8 +67,9 @@ int next_word_in_group(struct bitmap_iterator_group *group,
 		     struct bitmap_iterator_state *states,
 		     size_t *cur_pos, bitmap_word_t *pword);
 static
-void next_word_in_bitmap(struct slist_node **pnode, size_t *poffset,
-	int bitmap_ops, bitmap_word_t *word);
+void next_word_in_bitmap(struct bitmap *bitmap,
+			 struct bitmap_page **ppage, size_t *poffset,
+			 int bitmap_ops, bitmap_word_t *word);
 
 int bitmap_iterator_new(struct bitmap_iterator **pit,
 			struct bitmap *bitmap,
@@ -199,7 +200,9 @@ int bitmap_iterator_newgroup(struct bitmap_iterator **pit,
 		for (size_t b = 0; b < groups[g]->elements_size; b++) {
 			struct bitmap *bitmap = groups[g]->elements[b].bitmap;
 			state->elements[b].offset = 0;
-			state->elements[b].page = &(bitmap->pages);
+			/* can be NULL, RB_MIN is an optimization */
+			state->elements[b].page =
+				RB_MIN(bitmap_pages_tree, &(bitmap->pages));
 		}
 
 		it->states[g] = state;
@@ -416,7 +419,8 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 			bitmap_word_t tmp_word = word_zeros();
 
 			state->elements[b].offset = next_pos;
-			next_word_in_bitmap(&(state->elements[b].page),
+			next_word_in_bitmap(group->elements[b].bitmap,
+				  &(state->elements[b].page),
 				  &(state->elements[b].offset),
 				  group->elements[b].pre_op,
 				  &tmp_word);
@@ -438,7 +442,8 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 		bitmap_word_t tmp_word = word_zeros();
 
 		state->elements[b].offset = next_pos;
-		next_word_in_bitmap(&(state->elements[b].page),
+		next_word_in_bitmap(group->elements[b].bitmap,
+			  &(state->elements[b].page),
 			  &(state->elements[b].offset),
 			  group->elements[b].pre_op,
 			  &tmp_word);
@@ -482,11 +487,11 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 
 		if (state->elements[b].offset <= *pcur_pos) {
 			state->elements[b].offset = *pcur_pos;
-			next_word_in_bitmap(&(state->elements[b].page),
+			next_word_in_bitmap(group->elements[b].bitmap,
+				  &(state->elements[b].page),
 				  &(state->elements[b].offset),
 				  group->elements[b].pre_op,
 				  &tmp_word);
-
 			/*
 			if (state->elements[b].offset > next_pos) {
 				next_pos = state->elements[b].offset;
@@ -509,7 +514,8 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 		bitmap_word_t tmp_word = word_zeros();
 
 		if (state->elements[b].offset == *pcur_pos) {
-			next_word_in_bitmap(&(state->elements[b].page),
+			next_word_in_bitmap(group->elements[b].bitmap,
+				  &(state->elements[b].page),
 				  &(state->elements[b].offset),
 				  group->elements[b].pre_op,
 				  &tmp_word);
@@ -528,70 +534,98 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 	return 0;
 }
 
+#if 0
+static
+struct bitmap_page *bitmap_pages_tree_RB_FIND_FROM(
+		struct bitmap_page *page,
+		struct bitmap_page *key) {
+	/* at next time try to lookup starting from current node */
+	while ((page != NULL) && (page->first_pos < key->first_pos)) {
+		page =  bitmap_pages_tree_RB_NEXT(page);
+	}
+
+	return page;
+}
+#endif
 
 static
-void next_word_in_bitmap(struct slist_node **pnode, size_t *poffset,
-	int bitmap_ops, bitmap_word_t *word) {
-	struct slist_node *node = *pnode;
-	for(; node->next != NULL; node = node->next) {
-		struct bitmap_page *page = slist_member_of(node->next,
-						struct bitmap_page, node);
+void next_word_in_bitmap(struct bitmap *bitmap,
+			 struct bitmap_page **ppage, size_t *poffset,
+			 int bitmap_ops, bitmap_word_t *word) {
 
-		size_t page_first_pos = page->first_pos;
-		size_t page_last_pos = page_first_pos +
-				BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT;
+	struct bitmap_page key;
+	key.first_pos = bitmap_page_first_pos(*poffset);
 
+	struct bitmap_page *page = *ppage;
+	if (page == NULL) {
+		/* at first time perform full tree lookup */
+		page = RB_NFIND(bitmap_pages_tree,
+				&(bitmap->pages), &key);
+	} else {
+		page = RB_NFIND(bitmap_pages_tree,
+				&(bitmap->pages), &key);
 		/*
-		printf("Iter2 %zu [%zu, %zu)\n", *poffset,
-		       page_first_pos, page_last_pos);
+		page = bitmap_pages_tree_RB_FIND_FROM(page, &key);
 		*/
-		if (*poffset < page_first_pos) {
-			*pnode = node;
+	}
 
-			if (bitmap_ops == BITMAP_OP_NOT) {
-				/*
-				 * Return word_ones() until
-				 * offset < page->first_pos.
-				 * Offset must not be changed!
-				 */
-				*word = word_ones();
-			} else {
-				*poffset = page_first_pos;
-				*word = word_zeros();
-			}
+	if (page == NULL) {
+		/*
+		 * No more data in the bitmap
+		 */
 
-			return;
+		if (bitmap_ops == BITMAP_OP_NOT) {
+			/* no more words - return all ones */
+			*word = word_ones();
+		} else {
+			/* no more words - stop iteration */
+			*poffset = SIZE_MAX;
+			*word = word_zeros();
 		}
 
-		if (*poffset >= page_last_pos) {
-			continue;
-		}
+		*ppage = page;
 
-		size_t w = (*poffset - page_first_pos) / BITMAP_WORD_BIT;
+		return;
+	}
+
+	if (page->first_pos == *poffset) {
+		/*
+		 * Word with requested offset has been found
+		 */
+
+		size_t w = (*poffset - page->first_pos) / BITMAP_WORD_BIT;
 		if (bitmap_ops == BITMAP_OP_NOT) {
 			*word = word_not(page->words[w]);
 		} else {
 			*word = page->words[w];
 		}
 
-		*pnode = node;
+		/* offset has not changed */
+		*ppage = page;
 
 		return;
 	}
 
-	/*
-	 * No more data in the bitmap
-	 */
+	assert(page->first_pos > *poffset);
 
-	/* update page node pointer */
-	*pnode = node;
-
-	if ((bitmap_ops == BITMAP_OP_NOT)) {
-		/* no more words - return all ones */
+	if (bitmap_ops == BITMAP_OP_NOT) {
+		/*
+		 * Return word_ones() until offset < page->first_pos.
+		 * Offset && page must not be changed!
+		 */
 		*word = word_ones();
 	} else {
-		/* no more words in bitmap */
-		*poffset = SIZE_MAX;
+		/*
+		 * We look for first page with first_pos >= *poffset.
+		 * Since we does not found page where first_pos == *poffset,
+		 * we can add some hints here in order to speedup upper levels.
+		 *
+		 * Next time upper levels would call this method with
+		 * *poffset >= page->first_pos;
+		 */
+
+		*poffset = page->first_pos;
+		*ppage = page;
 		*word = word_zeros();
 	}
 

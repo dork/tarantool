@@ -34,11 +34,19 @@
  * SUCH DAMAGE.
  */
 
+#include "third_party/tree.h"
+
 typedef size_t bitmap_word_t;
-/* defines how many words will be stored in one page */
+
+/** Numbers of words in one page */
 #define BITMAP_WORDS_PER_PAGE 1
 
-extern const size_t BITMAP_WORD_BIT;
+/** Number of bits in one word */
+static const size_t BITMAP_WORD_BIT = (sizeof(bitmap_word_t) * CHAR_BIT);
+
+/** Number of bits in one page */
+static const size_t BITMAP_PAGE_BIT = (BITMAP_WORDS_PER_PAGE *
+					(sizeof(bitmap_word_t) * CHAR_BIT));
 
 /*
  * Operations on words
@@ -97,34 +105,45 @@ bitmap_word_t word_xnor(bitmap_word_t word1, bitmap_word_t word2) {
 bool test_bit(const void *data, size_t pos);
 int find_next_set_bit(const void *data, size_t data_size, size_t *ppos);
 
-/* TODO(roman): split slist from this file */
-
-/**
- * Single-Linked List definition
- */
-struct slist_node {
-	struct slist_node *next;
-};
-/* gets pointer to outer structure */
-#define slist_member_of(ptr, type, member) ( \
-	(type *)( (char *) ptr - offsetof(type,member) ))
-
 /**
  * Bitmap definition
  */
 struct bitmap {
-	struct slist_node pages;
+	RB_HEAD(bitmap_pages_tree, bitmap_page) pages;
 	size_t cardinality;
 };
 
 struct bitmap_page {
-	struct slist_node node;
+	RB_ENTRY(bitmap_page) node;
 	size_t first_pos;
 	bitmap_word_t words[BITMAP_WORDS_PER_PAGE];
 };
 
+static inline
+size_t bitmap_page_first_pos(size_t pos) {
+	return (pos - (pos % BITMAP_PAGE_BIT));
+}
+
 #ifdef DEBUG
 void bitmap_debug_print(struct bitmap *bitmap);
 #endif /* def DEBUG */
+
+/*
+ * Red-Black Tree for pages
+ */
+
+static inline int
+bitmap_page_cmp(const struct bitmap_page *a, const struct bitmap_page *b)
+{
+	if (a->first_pos < b->first_pos) {
+		return -1;
+	} else if (a->first_pos == b->first_pos) {
+		return 0;
+	} else {
+		return 1;
+	}
+}
+
+RB_PROTOTYPE(bitmap_pages_tree, bitmap_page, node, bitmap_page_cmp);
 
 #endif /* BITMAP_BITMAP_P_H_INCLUDED */

@@ -39,8 +39,7 @@
 
 #include "bitmap_p.h"
 
-/** Number of bits in one word */
-const size_t BITMAP_WORD_BIT = sizeof(bitmap_word_t) * CHAR_BIT;
+RB_GENERATE(bitmap_pages_tree, bitmap_page, node, bitmap_page_cmp);
 
 bool test_bit(const void *data, size_t pos)
 {
@@ -88,6 +87,9 @@ int bitmap_new(struct bitmap **pbitmap)
 		return -1;
 	}
 
+	struct bitmap *bitmap = *pbitmap;
+	RB_INIT(&(bitmap->pages));
+
 	return 0;
 }
 
@@ -96,48 +98,33 @@ void bitmap_free(struct bitmap **pbitmap)
 	struct bitmap *bitmap = *pbitmap;
 	if (bitmap != NULL) {
 		/* cleanup pages */
-		struct slist_node *node = bitmap->pages.next;
-		while (node != NULL) {
-			struct slist_node *next = node->next;
-			struct bitmap_page *page = slist_member_of(node,
-						struct bitmap_page, node);
+		struct bitmap_page *page = NULL, *next = NULL;
+		RB_FOREACH_SAFE(page, bitmap_pages_tree,
+				&(bitmap->pages), next) {
+			RB_REMOVE(bitmap_pages_tree, &(bitmap->pages), page);
 			free(page);
-			node = next;
 		}
+
 		free(bitmap);
 	}
+
 	*pbitmap = NULL;
 }
 
 
 bool bitmap_get(struct bitmap *bitmap, size_t pos)
 {
-	struct slist_node *node = &(bitmap->pages);
-	for (; node->next != NULL; node = node->next) {
-		struct bitmap_page *page = slist_member_of(node->next,
-						struct bitmap_page, node);
+	struct bitmap_page key;
+	key.first_pos = bitmap_page_first_pos(pos);
 
-		size_t page_first_pos = page->first_pos;
-		size_t page_last_pos = page->first_pos +
-				BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT;
+	struct bitmap_page *page = RB_FIND(bitmap_pages_tree,
+					&(bitmap->pages), &key);
 
-		/*
-		printf("Iter pos=%zu: [%zu, %zu)\n",
-		       pos, page_first_pos, page_last_pos);
-		*/
-
-		if (pos < page_first_pos) {
-			break;
-		}
-
-		if (pos >= page_last_pos) {
-			continue;
-		}
-
-		return bitmap_get_from_page(page, pos - page->first_pos);
+	if (page == NULL) {
+		return false;
 	}
 
-	return false;
+	return bitmap_get_from_page(page, pos - page->first_pos);
 }
 
 static
@@ -148,56 +135,31 @@ bool bitmap_get_from_page(struct bitmap_page *page, size_t pos)
 	return (page->words[w] & ((bitmap_word_t) 1 << offset)) != 0;
 }
 
-static
-int bitmap_add_page(struct slist_node *node, size_t first_pos)
-{
-	/* resize bitmap */
-	struct bitmap_page *page = calloc(1, sizeof(struct bitmap_page));
-	if (page == NULL) {
-		return -1;
-	}
-
-	page->first_pos = first_pos;
-
-	page->node.next = node->next;
-	node->next = &(page->node);
-
-	return 0;
-}
-
 int bitmap_set(struct bitmap *bitmap, size_t pos, bool val)
 {
-	struct slist_node *node = &(bitmap->pages);
-	size_t page_first_pos = 0;
-	size_t page_last_pos = 0;
+	struct bitmap_page key;
+	key.first_pos = bitmap_page_first_pos(pos);
 
-	for(; node->next != NULL; node = node->next) {
-		struct bitmap_page *page = slist_member_of(node->next,
-						struct bitmap_page, node);
+	struct bitmap_page *page = RB_FIND(bitmap_pages_tree,
+					&(bitmap->pages), &key);
 
-		page_first_pos = page->first_pos;
-		page_last_pos = page_first_pos +
-				BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT;
-
-		if (pos < page_first_pos) {
-			break;
+	if (page == NULL) {
+		if (!val) {
+			/* trying to unset bit, but page does not exist */
+			return 0;
 		}
 
-		if (pos < page_last_pos) {
-			break;
-		}
-	}
-
-	if (node->next == NULL || pos < page_first_pos) {
-		size_t first_pos = pos -
-				(pos % (BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT));
-		if (bitmap_add_page(node, first_pos) < 0) {
+		/* resize bitmap */
+		page = calloc(1, sizeof(struct bitmap_page));
+		if (page == NULL) {
 			return -1;
 		}
+
+		page->first_pos = key.first_pos;
+		RB_INSERT(bitmap_pages_tree,
+			  &(bitmap->pages), page);
 	}
 
-	struct bitmap_page *page = slist_member_of(node->next,
-					struct bitmap_page, node);
 	if (bitmap_get_from_page(page, pos - page->first_pos) != val) {
 		bitmap_set_in_page(page, pos - page->first_pos, val);
 
@@ -232,20 +194,17 @@ size_t bitmap_cardinality(struct bitmap *bitmap) {
 #ifdef DEBUG
 void bitmap_debug_print(struct bitmap *bitmap) {
 	printf("Bitmap {\n");
-	struct slist_node *node = &(bitmap->pages);
-	for(; node->next != NULL; node = node->next) {
-		struct bitmap_page *page = slist_member_of(node->next,
-						struct bitmap_page, node);
-
+	struct bitmap_page *page = NULL;
+	RB_FOREACH(page, bitmap_pages_tree, &(bitmap->pages)) {
 		size_t page_first_pos = page->first_pos;
 		size_t page_last_pos = page_first_pos +
-				BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT;
+				BITMAP_PAGE_BIT;
 
 		printf("    [%zu, %zu) ", page_first_pos, page_last_pos);
 
 		size_t size = BITMAP_WORDS_PER_PAGE * sizeof(bitmap_word_t);
 		size_t pos = 0;
-		while (find_next_set_bit(page->words, size, &pos) != 0) {
+		while (find_next_set_bit(page->words, size, &pos) == 0) {
 			printf("%zu ", page_first_pos + pos);
 			pos++;
 		}
