@@ -2,11 +2,17 @@
 	*** test_resize: done ***
  	*** test_size ***
 	*** test_size: done ***
- 	*** test_random_pairs ***
+ 	*** test_contains ***
 Generating test set... ok
 Inserting pairs... ok
 Checking keys... ok
 Removing random pairs... ok
 Checking keys... ok
-	*** test_random_pairs: done ***
+	*** test_contains: done ***
+ 	*** test_intersects ***
+	*** test_intersects: done ***
+ 	*** test_equals ***
+Insert done
+Check done
+	*** test_equals: done ***
  
