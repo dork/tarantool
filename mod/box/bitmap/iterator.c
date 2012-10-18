@@ -263,25 +263,6 @@ void bitmap_iterator_free(struct bitmap_iterator **pit)
 	*pit = NULL;
 }
 
-
-/* TODO(roman): check similar method in bitmap_index */
-static
-size_t word_next_bit(bitmap_word_t *pword)
-{
-	bitmap_word_t bit = 1;
-
-	for (size_t i = 0; i < BITMAP_WORD_BIT; i++) {
-		if ((*pword & bit) != 0) {
-			*pword ^= bit;
-			return i;
-		}
-
-		bit <<= 1;
-	}
-
-	return SIZE_MAX;
-}
-
 size_t bitmap_iterator_next(struct bitmap_iterator *it)
 {
 	/*
@@ -289,15 +270,13 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 	printf("Next: pos=%zu word=%zu\n", it->cur_pos, it->cur_word);
 	*/
 
-	size_t result = SIZE_MAX;
 	int next_word_ret = 0;
 
 	while (next_word_ret == 0) {
-		result = word_next_bit(&(it->cur_word));
+		int result = word_iter_bit(&(it->cur_word));
 
-		if (result != SIZE_MAX) {
-			result += it->cur_pos;
-			break;
+		if (result > 0) {
+			return (it->cur_pos + result - 1);
 		}
 
 		it->cur_pos += BITMAP_WORD_BIT;
@@ -305,7 +284,7 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 		next_word_ret = next_word(it);
 	}
 
-	return result;
+	return SIZE_MAX;
 }
 
 static

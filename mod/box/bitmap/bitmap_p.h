@@ -36,10 +36,14 @@
 
 #include "third_party/tree.h"
 
+#include <stdlib.h>
+#include <stdint.h>
+#include <stddef.h>
+
 typedef size_t bitmap_word_t;
 
 /** Numbers of words in one page */
-#define BITMAP_WORDS_PER_PAGE 64
+#define BITMAP_WORDS_PER_PAGE 128
 
 /** Number of bits in one word */
 static const size_t BITMAP_WORD_BIT = (sizeof(bitmap_word_t) * CHAR_BIT);
@@ -99,12 +103,58 @@ bitmap_word_t word_xnor(bitmap_word_t word1, bitmap_word_t word2) {
 	return ~(word1 ^ word2);
 }
 
+#if defined(__GNUC__) || defined(__clang__)
+#define HAVE_FFSTI2
+int __ffsti2 (long long int lli);
+#endif
+
+/**
+ * @brief Finds the index of the least significant 1-bit in this word
+ * and sets this bit to zero
+ * @param pword
+ * @return the index of the least significant 1-bit in this word
+ */
+#if defined(HAVE_FFSTI2)
+static inline
+int word_iter_bit(bitmap_word_t *pword)
+{
+	if (*pword == 0) {
+		return 0;
+	}
+
+	int i = __ffsti2 (*pword);
+	bitmap_word_t bit = 1;
+	*pword ^= (bit << (i-1));
+	return i;
+}
+#else /* not (gcc || clang) */
+static inline
+int word_iter_bit(bitmap_word_t *pword)
+{
+	if (*pword == 0) {
+		return 0;
+	}
+
+	bitmap_word_t bit = 1;
+
+	for (size_t i = 0; i < BITMAP_WORD_BIT; i++) {
+		if ((*pword & bit) != 0) {
+			*pword ^= bit;
+			return i+1;
+		}
+
+		bit <<= 1;
+	}
+
+	return 0;
+}
+#endif
+
 /*
  * General-purpose bit-manipulation functions
  */
 bool test_bit(const void *data, size_t pos);
 int find_next_set_bit(const void *data, size_t data_size, size_t *ppos);
-
 /**
  * Bitmap definition
  */
