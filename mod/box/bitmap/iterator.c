@@ -534,7 +534,8 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 	return 0;
 }
 
-#if 0
+#define USE_FINDFROM 1
+#ifdef USE_FINDFROM
 static
 struct bitmap_page *bitmap_pages_tree_RB_FIND_FROM(
 		struct bitmap_page *page,
@@ -562,11 +563,14 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 		page = RB_NFIND(bitmap_pages_tree,
 				&(bitmap->pages), &key);
 	} else {
-		page = RB_NFIND(bitmap_pages_tree,
-				&(bitmap->pages), &key);
-		/*
+#ifndef USE_FINDFROM
+		if (page->first_pos != key.first_pos) {
+			page = RB_NFIND(bitmap_pages_tree,
+					&(bitmap->pages), &key);
+		}
+#else
 		page = bitmap_pages_tree_RB_FIND_FROM(page, &key);
-		*/
+#endif /* USE_FINDFROM */
 	}
 
 	if (page == NULL) {
@@ -588,7 +592,7 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 		return;
 	}
 
-	if (page->first_pos == *poffset) {
+	if (page->first_pos == key.first_pos) {
 		/*
 		 * Word with requested offset has been found
 		 */
@@ -606,7 +610,7 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 		return;
 	}
 
-	assert(page->first_pos > *poffset);
+	assert(page->first_pos > key.first_pos);
 
 	if (bitmap_ops == BITMAP_OP_NOT) {
 		/*
