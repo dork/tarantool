@@ -181,14 +181,16 @@ int bitmap_index_iterate_equals(struct bitmap_index *index,
 	for (size_t pos = 0; pos < key_bits; pos++) {
 		size_t b = pos + 1;
 		if (test_bit(key, pos)) {
-			if (index->bitmaps[b] == NULL) {
+			if (index->bitmaps[b] == NULL ||
+				index->bitmaps_size <= pos) {
 				elements_size = 0;
 				break;
 			}
 
 			elements_size++;
 		} else {
-			if (index->bitmaps[b] == NULL) {
+			if (index->bitmaps[b] == NULL
+				|| index->bitmaps_size <= pos) {
 				continue;
 			}
 			elements_size++;
