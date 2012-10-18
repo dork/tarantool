@@ -368,6 +368,13 @@ int next_word_in_group(struct bitmap_iterator_group *group,
 {
 	*pcur_pos = *pcur_pos - (*pcur_pos % BITMAP_WORD_BIT);
 
+	if (group->elements_size < 1) {
+		/* empty group */
+		*pcur_pos = SIZE_MAX;
+		*pcur_pos = word_zeros();
+		return -1;
+	}
+
 	switch(group->reduce_op) {
 	case BITMAP_OP_AND:
 		return next_word_in_group_and(group, state, pcur_pos, pword);
@@ -386,35 +393,43 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 			      size_t *pcur_pos, bitmap_word_t *pword) {
 	assert(group->reduce_op == BITMAP_OP_AND);
 
-	if (group->elements_size < 1) {
-		/* empty group */
-		*pcur_pos = SIZE_MAX;
-		*pcur_pos = word_zeros();
-		return -1;
-	}
-
+#if 0
 	/*
 	 * Try to sync all bitmaps and find first pos for that
 	 * pages && words exist in all bitmaps in this group
 	 */
-
 	size_t next_pos = *pcur_pos;
 	for(size_t b = 0; b < group->elements_size; b++) {
 		if (next_pos < state->elements[b].offset) {
 			next_pos = state->elements[b].offset;
 		}
 	}
+#endif
 
+	size_t next_pos = *pcur_pos;
+
+#if 0
+	bool flag = false;
+	size_t page_first_pos = bitmap_page_first_pos(*pcur_pos);
+	for(size_t b = 0; b < group->elements_size; b++) {
+		if (state->elements[b].page == NULL ||
+		    state->elements[b].page->first_pos != page_first_pos) {
+			flag = true;
+			break;
+		}
+	}
+#endif
 	while (true) {
 		bool synced = true;
 
 		if (next_pos == SIZE_MAX) {
 			/* no more elements */
 			*pcur_pos = SIZE_MAX;
-			*pcur_pos = word_zeros();
+			*pword = word_zeros();
 			return -1;
 		}
 
+		*pword = word_ones();
 		for(size_t b = 0; b < group->elements_size; b++) {
 			bitmap_word_t tmp_word = word_zeros();
 
@@ -430,6 +445,8 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 				next_pos = state->elements[b].offset;
 				break;
 			}
+
+			*pword = word_and(*pword, tmp_word);
 		}
 
 		if (synced) {
@@ -437,6 +454,9 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 		}
 	}
 
+	*pcur_pos = next_pos;
+
+#if 0
 	*pword = word_ones();
 	for(size_t b = 0; b < group->elements_size; b++) {
 		bitmap_word_t tmp_word = word_zeros();
@@ -452,6 +472,7 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 	}
 
 	*pcur_pos = next_pos;
+#endif
 
 	return 0;
 }
@@ -462,13 +483,6 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 			      size_t *pcur_pos, bitmap_word_t *pword) {
 	assert(group->reduce_op == BITMAP_OP_OR ||
 	       group->reduce_op == BITMAP_OP_XOR);
-
-	if (group->elements_size < 1) {
-		/* empty group */
-		*pcur_pos = SIZE_MAX;
-		*pcur_pos = word_zeros();
-		return -1;
-	}
 
 	/* get minimum position from all bitmaps */
 	size_t next_pos = SIZE_MAX;

@@ -39,7 +39,7 @@
 typedef size_t bitmap_word_t;
 
 /** Numbers of words in one page */
-#define BITMAP_WORDS_PER_PAGE 1
+#define BITMAP_WORDS_PER_PAGE 64
 
 /** Number of bits in one word */
 static const size_t BITMAP_WORD_BIT = (sizeof(bitmap_word_t) * CHAR_BIT);
