@@ -45,11 +45,11 @@ static struct index_traits bitmap_index_traits = {
 	.allows_partial_key = false,
 };
 
-static const size_t PTR_SHIFT = (CHAR_BIT == 8) ? 3 : 0;
+/* tuple size is >= 12 bytes */
+static const size_t PTR_SHIFT = (CHAR_BIT == 8) ? 4 : 0;
 
 inline
 size_t tuple_to_value(struct tuple *tuple) {
-	/* TODO: shift pointer address */
 	return (size_t) tuple >> PTR_SHIFT;
 }
 
