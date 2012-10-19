@@ -34,23 +34,39 @@
  * SUCH DAMAGE.
  */
 
+/* TODO(roman): update CMakeLists.txt */
+#define ENABLE_SSE2 1
+#define HAVE_FFSDI2 1
+#define HAVE_FFSTI2 1
+
 #include "third_party/tree.h"
 
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <limits.h>
+#include <assert.h>
 
+#if defined(ENABLE_SSE2)
+#include <emmintrin.h>
+#endif /* defined(ENABLE_SSE2) */
+
+#if defined(ENABLE_SSE2)
+typedef __m128i bitmap_word_t;
+#define __BITMAP_WORD_BIT 128
+#else /* !defined(ENABLE_SSE2) */
 typedef size_t bitmap_word_t;
+#define __BITMAP_WORD_BIT (__SIZEOF_SIZE_T__ * CHAR_BIT)
+#endif
 
 /** Numbers of words in one page */
-#define BITMAP_WORDS_PER_PAGE 16 // works good on my i5
+#define BITMAP_WORDS_PER_PAGE 16 /* works good on my i5 */
 
 /** Number of bits in one word */
-static const size_t BITMAP_WORD_BIT = (sizeof(bitmap_word_t) * CHAR_BIT);
+#define BITMAP_WORD_BIT __BITMAP_WORD_BIT
 
 /** Number of bits in one page */
-static const size_t BITMAP_PAGE_BIT = (BITMAP_WORDS_PER_PAGE *
-					(sizeof(bitmap_word_t) * CHAR_BIT));
+#define BITMAP_PAGE_BIT (BITMAP_WORDS_PER_PAGE * BITMAP_WORD_BIT)
 
 /*
  * Operations on words
@@ -59,96 +75,193 @@ static const size_t BITMAP_PAGE_BIT = (BITMAP_WORDS_PER_PAGE *
 /* TODO(roman): implement word_xxx methods using SSE2 */
 
 static inline
-bitmap_word_t word_zeros() {
+bitmap_word_t word_set_zeros()
+{
+#if defined(ENABLE_SSE2)
+	return _mm_setzero_si128();
+#else /* !defined(ENABLE_SSE2) */
 	return 0;
+#endif
 }
 
 static inline
-bitmap_word_t word_ones() {
+bitmap_word_t word_set_ones()
+{
+#if defined(ENABLE_SSE2)
+	/* like _mm_setzero_si128, but with -1 */
+	return __extension__(__m128i)(__v4si){-1,-1,-1,-1};
+#else /* !defined(ENABLE_SSE2) */
 	return (bitmap_word_t) -1;
+#endif
 }
 
 static inline
-bitmap_word_t word_not(bitmap_word_t word) {
+bool word_test_zeros(const bitmap_word_t word)
+{
+#if defined(ENABLE_SSE2)
+	return (_mm_movemask_epi8(_mm_cmpeq_epi8(word, word_set_zeros()))
+			== 0xFFFF);
+#else /* !defined(ENABLE_SSE2) */
+	return (word == 0);
+#endif
+}
+
+static inline
+bool word_test_ones(const bitmap_word_t word)
+{
+#if defined(ENABLE_SSE2)
+	return (_mm_movemask_epi8(_mm_cmpeq_epi8(word, word_set_ones()))
+			== 0xFFFF);
+#else /* !defined(ENABLE_SSE2) */
+	return (word == -1);
+#endif
+}
+
+static inline
+bitmap_word_t word_not(const bitmap_word_t word)
+{
 	return ~word;
 }
 
 static inline
-bitmap_word_t word_and(bitmap_word_t word1, bitmap_word_t word2) {
+bitmap_word_t word_and(const bitmap_word_t word1, const bitmap_word_t word2)
+{
 	return (word1 & word2);
 }
 
 static inline
-bitmap_word_t word_nand(bitmap_word_t word1, bitmap_word_t word2) {
+bitmap_word_t word_nand(const bitmap_word_t word1, const bitmap_word_t word2)
+{
 	return ~(word1 & word2);
 }
 
 static inline
-bitmap_word_t word_or(bitmap_word_t word1, bitmap_word_t word2) {
+bitmap_word_t word_or(const bitmap_word_t word1, const bitmap_word_t word2)
+{
 	return (word1 | word2);
 }
 
 static inline
-bitmap_word_t word_nor(bitmap_word_t word1, bitmap_word_t word2) {
+bitmap_word_t word_nor(bitmap_word_t word1, bitmap_word_t word2)
+{
 	return ~(word1 | word2);
 }
 
 static inline
-bitmap_word_t word_xor(bitmap_word_t word1, bitmap_word_t word2) {
+bitmap_word_t word_xor(const bitmap_word_t word1, const bitmap_word_t word2)
+{
 	return (word1 ^ word2);
 }
 
 static inline
-bitmap_word_t word_xnor(bitmap_word_t word1, bitmap_word_t word2) {
+bitmap_word_t word_xnor(const bitmap_word_t word1, const bitmap_word_t word2)
+{
 	return ~(word1 ^ word2);
 }
 
-#if defined(__GNUC__) || defined(__clang__)
-#define HAVE_FFSTI2
-int __ffsti2 (long long int lli);
+static inline
+bitmap_word_t word_bitmask(int offset)
+{
+#if defined(ENABLE_SSE2)
+	assert(offset >= 0 && offset < 128);
+	/* SSE2 does not have BIT shift instruction, so
+	 * we prepareed bitmask by filling 4 x 32 or 2 x 64 words
+	 */
+#if __WORDSIZE == 32
+	if (offset < 32) {
+		return _mm_set_epi32(0, 0, 0, (uint32_t) 1 << (offset & 0x1f));
+	} else if (offset < 64) {
+		return _mm_set_epi32(0, 0, (uint32_t) 1 << (offset & 0x1f), 0);
+	} else if (offset < 96) {
+		return _mm_set_epi32(0, (uint32_t) 1 << (offset & 0x1f), 0, 0);
+	} else /* offset < 128 */ {
+		return _mm_set_epi32((uint32_t) 1 << (offset & 0x1f), 0, 0, 0);
+	}
+#elif __WORDSIZE == 64
+	if (offset < 64) {
+		return _mm_set_epi64x(0, (uint64_t) 1 << (offset & 0x3f));
+	} else /* offset < 128 */ {
+		return _mm_set_epi64x((uint64_t) 1 << (offset & 0x3f), 0);
+	}
+#else
+#error SSE2 with given WORDSIZE is not supported
+#endif /* WORDSIZE */
+#else /* !defined(ENABLE_SSE2) */
+	return (bitmap_word_t) 1 << offset;
 #endif
+}
 
+static inline
+bool word_test_bit(const bitmap_word_t word, int offset)
+{
+	const bitmap_word_t mask = word_bitmask(offset);
+	return !word_test_zeros(word & mask);
+}
+
+static inline
+bitmap_word_t word_set_bit(const bitmap_word_t word, int offset)
+{
+	const bitmap_word_t mask = word_bitmask(offset);
+	return (word | mask);
+}
+
+static inline
+bitmap_word_t word_clear_bit(const bitmap_word_t word, int offset)
+{
+	const bitmap_word_t mask = word_bitmask(offset);
+	return (word & (~mask));
+}
+
+#if defined(HAVE_FFSDI2)
+	int __ffsdi2 (long);
+#endif
+#if defined(HAVE_FFSTI2)
+	int __ffsti2 (long long);
+#endif
 /**
  * @brief Finds the index of the least significant 1-bit in this word
- * and sets this bit to zero
- * @param pword
- * @return the index of the least significant 1-bit in this word
+ * starting from start_pos
+ * @param word
+ * @return the index+1 of the least significant 1-bit in this word or
+ * 0 if word is zero.
  */
-#if defined(HAVE_FFSTI2)
 static inline
-int word_iter_bit(bitmap_word_t *pword)
+int word_find_set_bit(const bitmap_word_t word, int start_pos)
 {
-	if (*pword == 0) {
+	assert(start_pos < BITMAP_WORD_BIT);
+
+#if   !defined(ENABLE_SSE2) && ( \
+	 ((BITMAP_WORD_BIT == 32) && HAVE_FFSDI2) || \
+	 ((BITMAP_WORD_BIT == 64) && HAVE_FFSTI2))
+
+	/* HACK(roman): according to documentation, __ffsdi2 / __ffsti2
+	 * must return 0 if argument is zero, but they does not.
+	 */
+	const bitmap_word_t word1 = word >> start_pos;
+	if (word_test_zeros(word1)) {
 		return 0;
 	}
-
-	int i = __ffsti2 (*pword);
-	bitmap_word_t bit = 1;
-	*pword ^= (bit << (i-1));
-	return i;
-}
-#else /* not (gcc || clang) */
-static inline
-int word_iter_bit(bitmap_word_t *pword)
-{
-	if (*pword == 0) {
-		return 0;
+#if   BITMAP_WORD_BIT == 32
+	int pos = __extension__(__ffsdi2 (word1));
+#elif BITMAP_WORD_BIT == 64
+	int pos = __extension__(__ffsti2 (word1));
+#endif
+	if (pos == 0) {
+		return pos;
+	} else {
+		return start_pos + pos;
 	}
-
-	bitmap_word_t bit = 1;
-
-	for (size_t i = 0; i < BITMAP_WORD_BIT; i++) {
-		if ((*pword & bit) != 0) {
-			*pword ^= bit;
-			return i+1;
+#else
+	/* TODO(roman): implement an optimized version for SSE2 */
+	for (int pos = start_pos; pos < BITMAP_WORD_BIT; pos++) {
+		if (word_test_bit(word, pos)) {
+			return pos + 1;
 		}
-
-		bit <<= 1;
 	}
 
 	return 0;
-}
 #endif
+}
 
 /*
  * General-purpose bit-manipulation functions

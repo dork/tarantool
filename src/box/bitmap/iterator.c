@@ -209,8 +209,7 @@ int bitmap_iterator_newgroup(struct bitmap_iterator **pit,
 	}
 
 	it->cur_pos = 0;
-
-	next_word(it);
+	it->cur_word = word_set_zeros();
 
 	*pit = it;
 
@@ -270,18 +269,29 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 	printf("Next: pos=%zu word=%zu\n", it->cur_pos, it->cur_word);
 	*/
 
-	int next_word_ret = 0;
+	if (it->cur_pos == SIZE_MAX) {
+		return SIZE_MAX;
+	}
 
-	while (next_word_ret == 0) {
-		int result = word_iter_bit(&(it->cur_word));
-
-		if (result > 0) {
-			return (it->cur_pos + result - 1);
+	while (true) {
+		if ((it->cur_pos % BITMAP_WORD_BIT) == 0) {
+			if (next_word(it) < 0) {
+				break;
+			}
 		}
 
-		it->cur_pos += BITMAP_WORD_BIT;
+		int start_offset = it->cur_pos % BITMAP_WORD_BIT;
+		size_t word_first_pos = it->cur_pos - start_offset;
 
-		next_word_ret = next_word(it);
+		int result = word_find_set_bit(it->cur_word, start_offset);
+		if (result == 0) {
+			/* not more bits in current word */
+			it->cur_pos = word_first_pos + BITMAP_WORD_BIT;
+			continue;
+		}
+
+		it->cur_pos = word_first_pos + result;
+		return (it->cur_pos - 1);
 	}
 
 	return SIZE_MAX;
@@ -298,16 +308,16 @@ int next_word(struct bitmap_iterator *it) {
 	/*
 	 * Gets next words from each bitmap group and apply final AND reduction
 	 */
-	it->cur_word = word_ones();
+	it->cur_word = word_set_ones();
 	while(true) {
 		size_t offset_max = it->cur_pos;
 		for (size_t s = 0; s < it->groups_size; s++) {
-			bitmap_word_t tmp_word = word_zeros();
+			bitmap_word_t tmp_word = word_set_zeros();
 
 			if (next_word_in_group(it->groups[s], it->states[s],
 					&(offset_max), &(tmp_word)) < 0) {
 				it->cur_pos = SIZE_MAX;
-				it->cur_word = word_zeros();
+				it->cur_word = word_set_zeros();
 				return -1;
 			}
 
@@ -350,7 +360,7 @@ int next_word_in_group(struct bitmap_iterator_group *group,
 	if (group->elements_size < 1) {
 		/* empty group */
 		*pcur_pos = SIZE_MAX;
-		*pcur_pos = word_zeros();
+		*pword = word_set_zeros();
 		return -1;
 	}
 
@@ -404,13 +414,13 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 		if (next_pos == SIZE_MAX) {
 			/* no more elements */
 			*pcur_pos = SIZE_MAX;
-			*pword = word_zeros();
+			*pword = word_set_zeros();
 			return -1;
 		}
 
-		*pword = word_ones();
+		*pword = word_set_ones();
 		for(size_t b = 0; b < group->elements_size; b++) {
-			bitmap_word_t tmp_word = word_zeros();
+			bitmap_word_t tmp_word = word_set_zeros();
 
 			state->elements[b].offset = next_pos;
 			next_word_in_bitmap(group->elements[b].bitmap,
@@ -436,9 +446,9 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 	*pcur_pos = next_pos;
 
 #if 0
-	*pword = word_ones();
+	*pword = word_set_ones();
 	for(size_t b = 0; b < group->elements_size; b++) {
-		bitmap_word_t tmp_word = word_zeros();
+		bitmap_word_t tmp_word = word_set_zeros();
 
 		state->elements[b].offset = next_pos;
 		next_word_in_bitmap(group->elements[b].bitmap,
@@ -476,7 +486,7 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 	}
 
 	for(size_t b = 0; b < group->elements_size; b++) {
-		bitmap_word_t tmp_word = word_zeros();
+		bitmap_word_t tmp_word = word_set_zeros();
 
 		if (state->elements[b].offset <= *pcur_pos) {
 			state->elements[b].offset = *pcur_pos;
@@ -496,15 +506,15 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 	if (next_pos == SIZE_MAX) {
 		/* no more elements */
 		*pcur_pos = SIZE_MAX;
-		*pcur_pos = word_zeros();
+		*pword = word_set_zeros();
 		return -1;
 	}
 
 	*pcur_pos = next_pos;
 
-	*pword = word_zeros();
+	*pword = word_set_zeros();
 	for(size_t b = 0; b < group->elements_size; b++) {
-		bitmap_word_t tmp_word = word_zeros();
+		bitmap_word_t tmp_word = word_set_zeros();
 
 		if (state->elements[b].offset == *pcur_pos) {
 			next_word_in_bitmap(group->elements[b].bitmap,
@@ -514,7 +524,7 @@ int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
 				  &tmp_word);
 			assert(state->elements[b].offset == *pcur_pos);
 		} else {
-			tmp_word = word_zeros();
+			tmp_word = word_set_zeros();
 		}
 
 		if (group->reduce_op == BITMAP_OP_OR) {
@@ -573,11 +583,11 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 
 		if (bitmap_ops == BITMAP_OP_NOT) {
 			/* no more words - return all ones */
-			*word = word_ones();
+			*word = word_set_ones();
 		} else {
 			/* no more words - stop iteration */
 			*poffset = SIZE_MAX;
-			*word = word_zeros();
+			*word = word_set_zeros();
 		}
 
 		*ppage = page;
@@ -607,10 +617,10 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 
 	if (bitmap_ops == BITMAP_OP_NOT) {
 		/*
-		 * Return word_ones() until offset < page->first_pos.
+		 * Return word_set_ones() until offset < page->first_pos.
 		 * Offset && page must not be changed!
 		 */
-		*word = word_ones();
+		*word = word_set_ones();
 	} else {
 		/*
 		 * We look for first page with first_pos >= *poffset.
@@ -623,7 +633,7 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 
 		*poffset = page->first_pos;
 		*ppage = page;
-		*word = word_zeros();
+		*word = word_set_zeros();
 	}
 
 	return;

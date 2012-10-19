@@ -114,6 +114,8 @@ void bitmap_free(struct bitmap **pbitmap)
 
 bool bitmap_get(struct bitmap *bitmap, size_t pos)
 {
+	assert(pos < SIZE_MAX);
+
 	struct bitmap_page key;
 	key.first_pos = bitmap_page_first_pos(pos);
 
@@ -131,12 +133,14 @@ static
 bool bitmap_get_from_page(struct bitmap_page *page, size_t pos)
 {
 	size_t w = pos / BITMAP_WORD_BIT;
-	size_t offset = pos % BITMAP_WORD_BIT;
-	return (page->words[w] & ((bitmap_word_t) 1 << offset)) != 0;
+	int offset = pos % BITMAP_WORD_BIT;
+	return word_test_bit(page->words[w], offset);
 }
 
 int bitmap_set(struct bitmap *bitmap, size_t pos, bool val)
 {
+	assert(pos < SIZE_MAX);
+
 	struct bitmap_page key;
 	key.first_pos = bitmap_page_first_pos(pos);
 
@@ -178,11 +182,11 @@ static
 void bitmap_set_in_page(struct bitmap_page *page, size_t pos, bool val)
 {
 	size_t w = pos / BITMAP_WORD_BIT;
-	size_t offset = pos % BITMAP_WORD_BIT;
+	int offset = pos % BITMAP_WORD_BIT;
 	if (val) {
-		page->words[w] |= ((bitmap_word_t) 1 << offset);
+		page->words[w] = word_set_bit(page->words[w], offset);
 	} else {
-		page->words[w] ^= ((bitmap_word_t) 1 << offset);
+		page->words[w] = word_clear_bit(page->words[w], offset);
 	}
 }
 
