@@ -121,19 +121,19 @@ lbox_ipc_channel_isempty(struct lua_State *L)
 static int
 lbox_ipc_channel_put(struct lua_State *L)
 {
-	double timeout;
+	double timeout = 0.0;
 	int top = lua_gettop(L);
 	struct ipc_channel *ch;
 
 	switch(top) {
 		case 2:
-			timeout = 0;
+			timeout = 0.0;
 			break;
 		case 3:
 			if (!lua_isnumber(L, -1))
 				luaL_error(L, "timeout must be number");
 			timeout = lua_tonumber(L, -1);
-			if (timeout < 0)
+			if (timeout < 0.0)
 				luaL_error(L, "wrong timeout");
 			break;
 		default:
