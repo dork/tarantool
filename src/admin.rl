@@ -38,12 +38,12 @@
 #include <say.h>
 #include <stat.h>
 #include <tarantool.h>
-#include <tarantool_lua.h>
+#include "lua/init.h"
 #include <recovery.h>
-#include TARANTOOL_CONFIG
 #include <tbuf.h>
 #include <util.h>
 #include <errinj.h>
+#include "coio_buf.h"
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -188,8 +188,9 @@ show_stat(struct tbuf *buf)
 }
 
 static int
-admin_dispatch(lua_State *L)
+admin_dispatch(struct coio *coio, struct iobuf *iobuf, lua_State *L)
 {
+	struct ibuf *in = &iobuf->in;
 	struct tbuf *out = tbuf_alloc(fiber->gc_pool);
 	struct tbuf *err = tbuf_alloc(fiber->gc_pool);
 	int cs;
@@ -197,30 +198,18 @@ admin_dispatch(lua_State *L)
 	char *strstart, *strend;
 	bool state;
 
-	while ((pe = memchr(fiber->rbuf.data, '\n', fiber->rbuf.size)) == NULL) {
-		if (fiber_bread(&fiber->rbuf, 1) <= 0)
-			return 0;
+	while ((pe = memchr(in->pos, '\n', in->end - in->pos)) == NULL) {
+		if (coio_bread(coio, in, 1) <= 0)
+			return -1;
 	}
 
 	pe++;
-	p = fiber->rbuf.data;
+	p = in->pos;
 
 	%%{
 		action show_configuration {
-			tarantool_cfg_iterator_t *i;
-			char *key, *value;
-
 			start(out);
-			tbuf_printf(out, "configuration:" CRLF);
-			i = tarantool_cfg_iterator_init();
-			while ((key = tarantool_cfg_iterator_next(i, &cfg, &value)) != NULL) {
-				if (value) {
-					tbuf_printf(out, "  %s: \"%s\"" CRLF, key, value);
-					free(value);
-				} else {
-					tbuf_printf(out, "  %s: (null)" CRLF, key);
-				}
-			}
+			show_cfg(out);
 			end(out);
 		}
 
@@ -303,7 +292,7 @@ admin_dispatch(lua_State *L)
 		state = state_on | state_off;
 
 		commands = (help			%help						|
-			    exit			%{return 0;}					|
+			    exit			%{return -1;}					|
 			    lua  " "+ string		%lua						|
 			    show " "+ info		%{start(out); tarantool_info(out); end(out);}	|
 			    show " "+ fiber		%{start(out); fiber_info(out); end(out);}	|
@@ -323,7 +312,7 @@ admin_dispatch(lua_State *L)
 		write exec;
 	}%%
 
-	tbuf_ltrim(&fiber->rbuf, (void *)pe - (void *)fiber->rbuf.data);
+	in->pos = pe;
 
 	if (p != pe) {
 		start(out);
@@ -331,36 +320,39 @@ admin_dispatch(lua_State *L)
 		end(out);
 	}
 
-	return fiber_write(out->data, out->size);
+	coio_write(coio, out->data, out->size);
+	return 0;
 }
 
 static void
-admin_handler(void *data __attribute__((unused)))
+admin_handler(va_list ap)
 {
+	struct coio coio = va_arg(ap, struct coio);
+	struct iobuf *iobuf = va_arg(ap, struct iobuf *);
 	lua_State *L = lua_newthread(tarantool_L);
 	int coro_ref = luaL_ref(tarantool_L, LUA_REGISTRYINDEX);
 	@try {
 		for (;;) {
-			if (admin_dispatch(L) <= 0)
+			if (admin_dispatch(&coio, iobuf, L) < 0)
 				return;
+			iobuf_gc(iobuf);
 			fiber_gc();
 		}
 	} @finally {
 		luaL_unref(tarantool_L, LUA_REGISTRYINDEX, coro_ref);
+		coio_close(&coio);
+		iobuf_destroy(iobuf);
 	}
 }
 
-int
-admin_init(void)
+void
+admin_init(const char *bind_ipaddr, int admin_port)
 {
-	if (fiber_server("admin", cfg.admin_port, admin_handler, NULL, NULL) == NULL) {
-		say_syserror("can't bind to %d", cfg.admin_port);
-		return -1;
-	}
-	return 0;
+	static struct coio_service admin;
+	coio_service_init(&admin, "admin", bind_ipaddr,
+			  admin_port, admin_handler, NULL);
+	evio_service_start(&admin.evio_service);
 }
-
-
 
 /*
  * Local Variables:

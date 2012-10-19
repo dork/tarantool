@@ -35,112 +35,108 @@
 #include "log_io.h"
 #include "fiber.h"
 #include "pickle.h"
+#include "coio_buf.h"
 
-static int
+static void
 remote_apply_row(struct recovery_state *r, struct tbuf *row);
 
-static struct tbuf *
-remote_row_reader_v11()
+static struct tbuf
+remote_read_row(struct coio *coio, struct iobuf *iobuf)
 {
-	ssize_t to_read = sizeof(struct header_v11) - fiber->rbuf.size;
+	struct ibuf *in = &iobuf->in;
+	ssize_t to_read = sizeof(struct header_v11) - ibuf_size(in);
 
-	if (to_read > 0 && fiber_bread(&fiber->rbuf, to_read) <= 0)
-		goto error;
+	if (to_read > 0)
+		coio_breadn(coio, in, to_read);
 
-	ssize_t request_len = header_v11(&fiber->rbuf)->len + sizeof(struct header_v11);
-	to_read = request_len - fiber->rbuf.size;
+	ssize_t request_len = ((struct header_v11 *)in->pos)->len + sizeof(struct header_v11);
+	to_read = request_len - ibuf_size(in);
 
-	if (to_read > 0 && fiber_bread(&fiber->rbuf, to_read) <= 0)
-		goto error;
+	if (to_read > 0)
+		coio_breadn(coio, in, to_read);
 
-	say_debug("read row bytes:%" PRI_SSZ, request_len);
-	return tbuf_split(&fiber->rbuf, request_len);
-error:
-	say_error("unexpected eof reading row header");
-	return NULL;
+	struct tbuf row = {
+		.size = request_len, .capacity = request_len,
+		.data = in->pos, .pool = fiber->gc_pool
+	};
+	in->pos += request_len;
+	return row;
 }
 
-static struct tbuf *
-remote_read_row(struct sockaddr_in *remote_addr, i64 initial_lsn)
+static void
+remote_connect(struct coio *coio, struct sockaddr_in *remote_addr,
+	       i64 initial_lsn, const char **err)
 {
-	struct tbuf *row;
+	*err = "can't connect to master";
+	coio_connect(coio, remote_addr);
+
+	*err = "can't write version";
+	coio_write(coio, &initial_lsn, sizeof(initial_lsn));
+
+	u32 version;
+	*err = "can't read version";
+	coio_readn(coio, &version, sizeof(version));
+	*err = NULL;
+	if (version != default_version)
+		tnt_raise(SystemError, :"remote version mismatch");
+
+	say_crit("successfully connected to master");
+	say_crit("starting replication from lsn: %" PRIi64, initial_lsn);
+}
+
+static void
+pull_from_remote(va_list ap)
+{
+	struct recovery_state *r = va_arg(ap, struct recovery_state *);
+	struct coio coio;
+	struct iobuf *iobuf = NULL;
 	bool warning_said = false;
 	const int reconnect_delay = 1;
-	const char *err = NULL;
-	u32 version;
+
+	coio_clear(&coio);
 
 	for (;;) {
-		if (fiber->fd < 0) {
-			if (fiber_connect(remote_addr) < 0) {
-				err = "can't connect to master";
-				goto err;
+		const char *err = NULL;
+		@try {
+			fiber_setcancellable(true);
+			if (! coio_is_connected(&coio)) {
+				if (iobuf == NULL)
+					iobuf = iobuf_create(fiber->name);
+				remote_connect(&coio, &r->remote->addr,
+					       r->confirmed_lsn + 1, &err);
+				warning_said = false;
 			}
-
-			if (fiber_write(&initial_lsn, sizeof(initial_lsn)) != sizeof(initial_lsn)) {
-				err = "can't write version";
-				goto err;
-			}
-
-			if (fiber_read(&version, sizeof(version)) != sizeof(version)) {
-				err = "can't read version";
-				goto err;
-			}
-
-			if (version != default_version) {
-				err = "remote version mismatch";
-				goto err;
-			}
-
-			say_crit("successfully connected to master");
-			say_crit("starting replication from lsn:%" PRIi64, initial_lsn);
-
-			warning_said = false;
-			err = NULL;
-		}
-
-		row = remote_row_reader_v11();
-		if (row == NULL) {
 			err = "can't read row";
-			goto err;
-		}
+			struct tbuf row = remote_read_row(&coio, iobuf);
+			fiber_setcancellable(false);
+			err = NULL;
 
-		return row;
+			r->remote->recovery_lag = ev_now() - header_v11(&row)->tm;
+			r->remote->recovery_last_update_tstamp = ev_now();
 
-	      err:
-		if (err != NULL && !warning_said) {
-			say_info("%s", err);
-			say_info("will retry every %i second", reconnect_delay);
-			warning_said = true;
+			remote_apply_row(r, &row);
+
+			iobuf_gc(iobuf);
+			fiber_gc();
+		} @catch (FiberCancelException *e) {
+			iobuf_destroy(iobuf);
+			coio_close(&coio);
+			@throw;
+		} @catch (tnt_Exception *e) {
+			[e log];
+			if (! warning_said) {
+				if (err != NULL)
+					say_info("%s", err);
+				say_info("will retry every %i second", reconnect_delay);
+				warning_said = true;
+			}
+			coio_close(&coio);
+			fiber_sleep(reconnect_delay);
 		}
-		fiber_close();
-		fiber_sleep(reconnect_delay);
 	}
 }
 
 static void
-pull_from_remote(void *state)
-{
-	struct recovery_state *r = state;
-	struct tbuf *row;
-
-	for (;;) {
-		fiber_setcancelstate(true);
-		row = remote_read_row(&r->remote->addr, r->confirmed_lsn + 1);
-		fiber_setcancelstate(false);
-
-		r->remote->recovery_lag = ev_now() - header_v11(row)->tm;
-		r->remote->recovery_last_update_tstamp = ev_now();
-
-		if (remote_apply_row(r, row) < 0) {
-			fiber_close();
-			continue;
-		}
-
-		fiber_gc();
-	}
-}
-
-static int
 remote_apply_row(struct recovery_state *r, struct tbuf *row)
 {
 	struct tbuf *data;
@@ -152,7 +148,7 @@ remote_apply_row(struct recovery_state *r, struct tbuf *row)
 	data = tbuf_alloc(row->pool);
 	tbuf_append(data, row->data + sizeof(struct header_v11), header_v11(row)->len);
 
-	if (r->row_handler(row) < 0)
+	if (r->row_handler(r->row_handler_param, row) < 0)
 		panic("replication failure: can't apply row");
 
 	tag = read_u16(data);
@@ -166,8 +162,6 @@ remote_apply_row(struct recovery_state *r, struct tbuf *row)
 		panic("replication failure: can't write row to WAL");
 
 	set_lsn(r, lsn);
-
-	return 0;
 }
 
 void
@@ -185,9 +179,11 @@ recovery_follow_remote(struct recovery_state *r, const char *addr)
 	say_crit("initializing the replica, WAL master %s", addr);
 	snprintf(name, sizeof(name), "replica/%s", addr);
 
-	f = fiber_create(name, -1, pull_from_remote, r);
-	if (f == NULL)
+	@try {
+		f = fiber_create(name, pull_from_remote);
+	} @catch (tnt_Exception *e) {
 		return;
+	}
 
 	rc = sscanf(addr, "%31[^:]:%i", ip_addr, &port);
 	assert(rc == 2);
@@ -206,7 +202,7 @@ recovery_follow_remote(struct recovery_state *r, const char *addr)
 	memcpy(&remote.cookie, &remote.addr, MIN(sizeof(remote.cookie), sizeof(remote.addr)));
 	remote.reader = f;
 	r->remote = &remote;
-	fiber_call(f);
+	fiber_call(f, r);
 }
 
 void

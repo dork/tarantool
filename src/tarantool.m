@@ -62,7 +62,7 @@
 #include <third_party/gopt/gopt.h>
 #include <cfg/warning.h>
 #include "tarantool_pthread.h"
-#include "tarantool_lua.h"
+#include "lua/init.h"
 
 
 static pid_t master_pid;
@@ -253,10 +253,29 @@ reload_cfg(struct tbuf *out)
 	return 0;
 }
 
+/** Print the configuration file in YAML format. */
+void
+show_cfg(struct tbuf *out)
+{
+	tarantool_cfg_iterator_t *i;
+	char *key, *value;
+
+	tbuf_printf(out, "configuration:" CRLF);
+	i = tarantool_cfg_iterator_init();
+	while ((key = tarantool_cfg_iterator_next(i, &cfg, &value)) != NULL) {
+		if (value) {
+			tbuf_printf(out, "  %s: \"%s\"" CRLF, key, value);
+			free(value);
+		} else {
+			tbuf_printf(out, "  %s: (null)" CRLF, key);
+		}
+	}
+}
+
 const char *
 tarantool_version(void)
 {
-	return TARANTOOL_VERSION;
+	return PACKAGE_VERSION;
 }
 
 static double start_time;
@@ -296,11 +315,9 @@ snapshot(void *ev, int events __attribute__((unused)))
 		 */
 
 		snapshot_pid = p;
-		wait_for_child(p);
+		int status = wait_for_child(p);
 		snapshot_pid = 0;
-		assert(p == fiber->cw.rpid);
-		return (WIFSIGNALED(fiber->cw.rstatus) ? EINTR :
-			WEXITSTATUS(fiber->cw.rstatus));
+		return (WIFSIGNALED(status) ? EINTR : WEXITSTATUS(status));
 	}
 
 	fiber_set_name(fiber, "dumper");
@@ -801,33 +818,37 @@ main(int argc, char **argv)
 	atexit(tarantool_free);
 
 	ev_default_loop(EVFLAG_AUTO);
-
 	initialize(cfg.slab_alloc_arena, cfg.slab_alloc_minimal, cfg.slab_alloc_factor);
 	replication_prefork();
 
 	signal_init();
 
-	tarantool_L = tarantool_lua_init();
-	mod_init();
-	tarantool_lua_load_cfg(tarantool_L, &cfg);
-	admin_init();
-	replication_init();
-	/*
-	 * Load user init script.  The script should have access
-	 * to Tarantool Lua API (box.cfg, box.fiber, etc...) that
-	 * is why script must run only after the server was fully
-	 * initialized.
-	 */
-	tarantool_lua_load_init_script(tarantool_L);
 
-	prelease(fiber->gc_pool);
-	say_crit("log level %i", cfg.log_level);
-	say_crit("entering event loop");
-	if (cfg.io_collect_interval > 0)
-		ev_set_io_collect_interval(cfg.io_collect_interval);
-	ev_now_update();
-	start_time = ev_now();
-	ev_loop(0);
+	@try {
+		tarantool_L = tarantool_lua_init();
+		mod_init();
+		tarantool_lua_load_cfg(tarantool_L, &cfg);
+		admin_init(cfg.bind_ipaddr, cfg.admin_port);
+		replication_init();
+		/*
+		 * Load user init script.  The script should have access
+		 * to Tarantool Lua API (box.cfg, box.fiber, etc...) that
+		 * is why script must run only after the server was fully
+		 * initialized.
+		 */
+		tarantool_lua_load_init_script(tarantool_L);
+		prelease(fiber->gc_pool);
+		say_crit("log level %i", cfg.log_level);
+		say_crit("entering event loop");
+		if (cfg.io_collect_interval > 0)
+			ev_set_io_collect_interval(cfg.io_collect_interval);
+		ev_now_update();
+		start_time = ev_now();
+		ev_loop(0);
+	} @catch (tnt_Exception *e) {
+		[e log];
+		panic("%s", "Fatal error, exiting loop");
+	}
 	say_crit("exiting loop");
 	/* freeing resources */
 	return 0;

@@ -8,6 +8,7 @@ lcov
 *.so
 *.d
 *.dylib
+tmp/
 test/var
 test/lib/*.pyc
 test/lib/*/*.pyc
@@ -29,11 +30,12 @@ test/unit/rope_stress
 test/unit/bitmap_basic
 test/unit/bitmap_iterator
 test/unit/bitmap_index
+test/unit/rlist
 Makefile
 CMakeFiles
 CMakeCache.txt
 cmake_install.cmake
-mod/box/tarantool_box
+src/box/tarantool_box
 client/tarantool/tarantool
 include/config.h
 CPackConfig.cmake
@@ -57,7 +59,7 @@ third_party/luajit/src/lj_recdef.h
 third_party/luajit/src/lj_vm.s
 *.reject
 extra/txt2c
-mod/box/box.lua.c
+src/box/*.lua.c
 doc/www-data/*.html
 doc/www-data/*.ru.html
 doc/www-data.in/download

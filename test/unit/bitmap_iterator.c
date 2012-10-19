@@ -3,8 +3,8 @@
 #include <stdbool.h>
 #include <time.h>
 
-#include "mod/box/bitmap/bitmap.h"
-#include "mod/box/bitmap/index.h"
+#include "src/box/bitmap/bitmap.h"
+#include "src/box/bitmap/index.h"
 #include "unit.h"
 
 static const size_t NUM_SIZE = 1<<13;
