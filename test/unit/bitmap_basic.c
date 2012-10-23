@@ -118,6 +118,7 @@ void test_get_set()
 	for(size_t i = 0; i < NUM_SIZE; i++) {
 		if (rand() % 5 == 0) {
 			bitmap_set(bm, nums[i], 0);
+			fail_if(bitmap_get(bm, nums[i]));
 			nums[i] = SIZE_MAX;
 		}
 	}
@@ -183,4 +184,6 @@ int main(int argc, char *argv[])
 	setbuf(stdout, NULL);
 	test_cardinality();
 	test_get_set();
+
+	return 0;
 }

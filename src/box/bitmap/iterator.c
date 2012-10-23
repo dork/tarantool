@@ -47,8 +47,10 @@ struct bitmap_iterator {
 	struct bitmap_iterator_group **groups;
 	struct bitmap_iterator_state **states;
 
-	bitmap_word_t cur_word;
+	// bitmap_word_t cur_word;
 	size_t cur_pos;
+	int indexes[BITMAP_WORD_BIT + 1]; /* used for word_index_bits */
+	int indexes_pos;
 };
 
 /* like bitmap_iterator_group */
@@ -209,7 +211,8 @@ int bitmap_iterator_newgroup(struct bitmap_iterator **pit,
 	}
 
 	it->cur_pos = 0;
-	it->cur_word = word_set_zeros();
+	it->indexes[0] = 0;
+	it->indexes_pos = 0;
 
 	*pit = it;
 
@@ -264,11 +267,6 @@ void bitmap_iterator_free(struct bitmap_iterator **pit)
 
 size_t bitmap_iterator_next(struct bitmap_iterator *it)
 {
-	/*
-	printf("==================\n");
-	printf("Next: pos=%zu word=%zu\n", it->cur_pos, it->cur_word);
-	*/
-
 	if (it->cur_pos == SIZE_MAX) {
 		return SIZE_MAX;
 	}
@@ -280,18 +278,18 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 			}
 		}
 
-		int start_offset = it->cur_pos % BITMAP_WORD_BIT;
-		size_t word_first_pos = it->cur_pos - start_offset;
+		const size_t word_first_pos = it->cur_pos -
+				(it->cur_pos % BITMAP_WORD_BIT);
 
-		int result = word_find_set_bit(it->cur_word, start_offset);
-		if (result == 0) {
+		if (it->indexes[it->indexes_pos] != 0) {
+			it->cur_pos = word_first_pos +
+					it->indexes[it->indexes_pos++];
+			return (it->cur_pos - 1);
+		} else {
 			/* not more bits in current word */
 			it->cur_pos = word_first_pos + BITMAP_WORD_BIT;
 			continue;
 		}
-
-		it->cur_pos = word_first_pos + result;
-		return (it->cur_pos - 1);
 	}
 
 	return SIZE_MAX;
@@ -299,16 +297,26 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 
 static
 int next_word(struct bitmap_iterator *it) {
+	bitmap_word_t word;
+
 	if (it->groups_size == 1) {
 		/* optimization for case when only one group exist */
-		return next_word_in_group(it->groups[0], it->states[0],
-				&(it->cur_pos), &(it->cur_word));
+		int rc = next_word_in_group(it->groups[0], it->states[0],
+				&(it->cur_pos), &(word));
+		if (rc == 0) {
+			word_index_bits(word, it->indexes);
+			it->indexes_pos = 0;
+			return 0;
+		} else {
+			word = word_set_zeros();
+			return rc;
+		}
 	}
 
 	/*
 	 * Gets next words from each bitmap group and apply final AND reduction
 	 */
-	it->cur_word = word_set_ones();
+	word = word_set_ones();
 	while(true) {
 		size_t offset_max = it->cur_pos;
 		for (size_t s = 0; s < it->groups_size; s++) {
@@ -317,7 +325,7 @@ int next_word(struct bitmap_iterator *it) {
 			if (next_word_in_group(it->groups[s], it->states[s],
 					&(offset_max), &(tmp_word)) < 0) {
 				it->cur_pos = SIZE_MAX;
-				it->cur_word = word_set_zeros();
+				word = word_set_zeros();
 				return -1;
 			}
 
@@ -325,11 +333,13 @@ int next_word(struct bitmap_iterator *it) {
 				continue;
 			}
 
-			it->cur_word = word_and(it->cur_word, tmp_word);
+			word = word_and(word, tmp_word);
 		}
 
 		/* Exit if all groups are in same position */
 		if (offset_max == it->cur_pos) {
+			word_index_bits(word, it->indexes);
+			it->indexes_pos = 0;
 			return 0;
 		}
 
