@@ -352,6 +352,9 @@ iterator_wrapper_free(struct iterator *iterator)
 
 	assert(iterator->next == iterator_wrapper_next);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
+	if (it->bitmap_it != NULL) {
+		bitmap_iterator_free(&(it->bitmap_it));
+	}
 
 	void *bitmap_key = NULL;
 	size_t bitmap_key_size = 0;
