@@ -46,7 +46,7 @@ static struct index_traits bitmap_index_traits = {
 };
 
 /* tuple size is >= 12 bytes */
-static const size_t PTR_SHIFT = (CHAR_BIT == 8) ? 4 : 0;
+static const size_t PTR_SHIFT = (CHAR_BIT == 8) ? 3 : 0;
 
 inline
 size_t tuple_to_value(struct tuple *tuple) {
@@ -114,8 +114,6 @@ iterator_wrapper_next(struct iterator *iterator)
 void
 iterator_wrapper_free(struct iterator *iterator)
 {
-	say_debug("iterator_wrapper_free");
-
 	assert(iterator->next == iterator_wrapper_next);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
 
