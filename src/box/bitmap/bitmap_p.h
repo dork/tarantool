@@ -35,9 +35,10 @@
  */
 
 /* TODO(roman): update CMakeLists.txt */
-#define ENABLE_SSE2 1
-/* #define HAVE_POPCNTLL 1 */
-/* #define HAVE_POPCNT   1 */
+//#define ENABLE_AVX    1
+#define ENABLE_SSE2   1
+#define HAVE_POPCNTLL 1
+#define HAVE_POPCNT   1
 #define HAVE_CTZLL    1
 #define HAVE_CTZ      1
 
@@ -51,16 +52,22 @@
 #include <limits.h>
 #include <assert.h>
 
-#if defined(ENABLE_SSE2)
-#include <emmintrin.h>
-#endif /* defined(ENABLE_SSE2) */
+#if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
+#include <immintrin.h>
+#endif /* defined(ENABLE_SSE2) || defined(ENABLE_AVX) */
 
-#if defined(ENABLE_SSE2)
+#if   defined(ENABLE_AVX)
+typedef __m256i bitmap_word_t;
+#define __BITMAP_WORD_BIT 256
+#define BITMAP_WORD_ALIGNMENT 32
+#elif defined(ENABLE_SSE2)
 typedef __m128i bitmap_word_t;
 #define __BITMAP_WORD_BIT 128
-#else /* !defined(ENABLE_SSE2) */
+#define BITMAP_WORD_ALIGNMENT 16
+#else /* !defined(ENABLE_SSE2) && !defined(ENABLE_AVX) */
 typedef size_t bitmap_word_t; /* is always size_t if sse is disabled */
 #define __BITMAP_WORD_BIT (__SIZEOF_SIZE_T__ * CHAR_BIT)
+#define BITMAP_WORD_ALIGNMENT 8
 #endif
 
 /** Number of bits in one word */
@@ -85,7 +92,9 @@ typedef size_t bitmap_word_t; /* is always size_t if sse is disabled */
 static inline
 bitmap_word_t word_set_zeros()
 {
-#if defined(ENABLE_SSE2)
+#if defined(ENABLE_AVX)
+	return _mm256_setzero_si256();
+#elif defined(ENABLE_SSE2)
 	return _mm_setzero_si128();
 #else /* !defined(ENABLE_SSE2) */
 	return 0;
@@ -95,10 +104,12 @@ bitmap_word_t word_set_zeros()
 static inline
 bitmap_word_t word_set_ones()
 {
-#if defined(ENABLE_SSE2)
+#if defined(ENABLE_AVX)
+	return _mm256_setr_epi32(-1, -1, -1, -1, -1, -1, -1, -1);
+#elif defined(ENABLE_SSE2)
 	/* like _mm_setzero_si128, but with -1 */
 	return _mm_set_epi32(-1, -1, -1, -1);
-#else /* !defined(ENABLE_SSE2) */
+#else /* !defined(ENABLE_SSE2) && !defined(ENABLE_AVX) */
 	return SIZE_MAX;
 #endif
 }
@@ -106,7 +117,9 @@ bitmap_word_t word_set_ones()
 static inline
 bool word_test_zeros(const bitmap_word_t word)
 {
-#if defined(ENABLE_SSE2)
+#if   defined(ENABLE_AVX)
+	return _mm256_testz_si256(word, word) != 0;
+#elif defined(ENABLE_SSE2)
 	return (_mm_movemask_epi8(_mm_cmpeq_epi8(word, word_set_zeros()))
 			== 0xFFFF);
 #else /* !defined(ENABLE_SSE2) */
@@ -117,7 +130,9 @@ bool word_test_zeros(const bitmap_word_t word)
 static inline
 bool word_test_ones(const bitmap_word_t word)
 {
-#if defined(ENABLE_SSE2)
+#if   defined(ENABLE_AVX)
+	return _mm256_testc_si256(word, word) != 0;
+#elif defined(ENABLE_SSE2)
 	return (_mm_movemask_epi8(_mm_cmpeq_epi8(word, word_set_ones()))
 			== 0xFFFF);
 #else /* !defined(ENABLE_SSE2) */
@@ -167,36 +182,15 @@ bitmap_word_t word_xnor(const bitmap_word_t word1, const bitmap_word_t word2)
 	return ~(word1 ^ word2);
 }
 
-static inline
-bitmap_word_t word_bitmask(int offset)
+#if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
+/* don't inline this method if SSE2/AVX is enabled (too much code) */
+bitmap_word_t word_bitmask(int offset);
+#else /* !defined(ENABLE_SSE2) && !defined(ENABLE_AVX)) */
+static inline bitmap_word_t word_bitmask(int offset)
 {
-#if defined(ENABLE_SSE2)
-	/* SSE2 does not have BIT shift instruction, so
-	 * we prepareed bitmask by filling 4 x 32 or 2 x 64 words
-	 */
-#if __SIZEOF_SIZE_T__ == 4
-	if (offset < 32) {
-		return _mm_set_epi32(0, 0, 0, (uint32_t) 1 << (offset & 0x1f));
-	} else if (offset < 64) {
-		return _mm_set_epi32(0, 0, (uint32_t) 1 << (offset & 0x1f), 0);
-	} else if (offset < 96) {
-		return _mm_set_epi32(0, (uint32_t) 1 << (offset & 0x1f), 0, 0);
-	} else /* offset < 128 */ {
-		return _mm_set_epi32((uint32_t) 1 << (offset & 0x1f), 0, 0, 0);
-	}
-#elif __SIZEOF_SIZE_T__ == 8
-	if (offset < 64) {
-		return _mm_set_epi64x(0, (uint64_t) 1 << (offset & 0x3f));
-	} else /* offset < 128 */ {
-		return _mm_set_epi64x((uint64_t) 1 << (offset & 0x3f), 0);
-	}
-#else
-#error SSE2 with given __SIZEOF_SIZE_T__ is not supported
-#endif /* __SIZEOF_SIZE_T__ */
-#else /* !defined(ENABLE_SSE2) */
 	return (bitmap_word_t) 1 << offset;
-#endif
 }
+#endif
 
 static inline
 bool word_test_bit(const bitmap_word_t word, int offset)
@@ -250,10 +244,10 @@ struct bitmap {
 
 struct bitmap_page {
 	bitmap_word_t words[BITMAP_WORDS_PER_PAGE]
-		__attribute__ ((aligned(16)));
+		__attribute__ ((aligned(BITMAP_WORD_ALIGNMENT)));
 	RB_ENTRY(bitmap_page) node;
 	size_t first_pos;
-} __attribute__ ((aligned(16)));
+} __attribute__ ((aligned(BITMAP_WORD_ALIGNMENT)));
 
 static inline
 size_t bitmap_page_first_pos(size_t pos) {

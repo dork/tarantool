@@ -40,6 +40,75 @@
 
 #include "bitmap_p.h"
 
+#if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
+bitmap_word_t word_bitmask(int offset)
+{
+	/*
+	 * SSE2/AVX does not have BIT shift instruction
+	 * so we prepare mask from the parts
+	 */
+#if defined(ENABLE_AVX) && __SIZEOF_SIZE_T__ == 8
+	switch(offset / 64) {
+	case 0:
+		return _mm256_set_epi64x(0, 0, 0, 1UL << (offset % 64));
+	case 1:
+		return _mm256_set_epi64x(0, 0, 1UL << (offset % 64), 0);
+	case 2:
+		return _mm256_set_epi64x(0, 1UL << (offset % 64), 0, 0);
+	case 3:
+		return _mm256_set_epi64x(1UL << (offset % 64), 0, 0, 0);
+	}
+
+	return word_set_zeros();
+#elif defined(ENABLE_AVX) && __SIZEOF_SIZE_T__ == 4
+	switch(offset / 32) {
+	case 0: return _mm256_set_epi32(0, 0, 0, 0,
+					0, 0, 0, 1U << (offset % 32));
+	case 1: return _mm256_set_epi32(0, 0, 0, 0,
+					0, 0, 1U << (offset % 32), 0);
+	case 2: return _mm256_set_epi32(0, 0, 0, 0,
+					0, 1U << (offset % 32), 0, 0);
+	case 3: return _mm256_set_epi32(0, 0, 0, 0,
+					1U << (offset % 32), 0, 0, 0);
+	case 4: return _mm256_set_epi32(0, 0, 0, 1U << (offset % 32),
+					0, 0, 0, 0);
+	case 5: return _mm256_set_epi32(0, 0, 1U << (offset % 32), 0,
+					0, 0, 0, 0);
+	case 6: return _mm256_set_epi32(0, 1U << (offset % 32), 0, 0,
+					0, 0, 0, 0);
+	case 7: return _mm256_set_epi32(1U << (offset % 32), 0, 0, 0,
+					0, 0, 0, 0);
+	}
+
+	return word_set_zeros();
+#elif defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 8
+	switch (offset / 64) {
+	case 0:
+		return _mm_set_epi64x(0, 1UL << (offset % 64));
+	case 1:
+		return _mm_set_epi64x(1UL << (offset % 64), 0);
+	}
+
+	return word_set_zeros();
+#elif defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 4
+	switch (offset / 32) {
+	case 0:
+		return _mm_set_epi32(0, 0, 0, 1U << (offset % 32));
+	case 1:
+		return _mm_set_epi32(0, 0, 1U << (offset % 32), 0);
+	case 2:
+		return _mm_set_epi32(0, 1U << (offset % 32), 0, 0);
+	case 3:
+		return _mm_set_epi32(1U << (offset % 32), 0, 0, 0);
+	}
+
+	return word_set_zeros();
+#else
+#error SSE2/AVX with given __SIZEOF_SIZE_T__ is not supported
+#endif
+}
+#endif /* defined(ENABLE_SSE2) || defined(ENABLE_AVX) */
+
 int word_find_set_bit(const bitmap_word_t word, int start_pos)
 {
 #if !defined(ENABLE_SSE2) && (__SIZEOF_SIZE_T__ == 8) && HAVE_CTZLL
@@ -51,6 +120,46 @@ int word_find_set_bit(const bitmap_word_t word, int start_pos)
 #elif   !defined(ENABLE_SSE2) && (__SIZEOF_SIZE_T__ == 4) && HAVE_CTZ
 	if (start_pos < 32 && !word_test_zeros(word >> start_pos)) {
 		return 1 + start_pos + __builtin_ctz(word >> start_pos);
+	}
+
+	return 0;
+#elif  defined(ENABLE_AVX) && (__SIZEOF_SIZE_T__ == 8) && HAVE_CTZLL
+	union __cast {
+		__m256i m256;
+		uint64_t ui64[4];
+	} w;
+	w.m256 = word;
+
+	if (start_pos < 64 && (w.ui64[0] >> start_pos)) {
+		return 1 + start_pos +
+				__builtin_ctzll(w.ui64[0] >> (start_pos));
+	}
+
+	if(start_pos < 64) {
+		start_pos = 64;
+	}
+
+	if (start_pos < 128 && (w.ui64[1] >> (start_pos % 64))) {
+		return 1 + 64 + (start_pos % 64) +
+				__builtin_ctzll(w.ui64[1] >> (start_pos % 64));
+	}
+
+	if(start_pos < 128) {
+		start_pos = 128;
+	}
+
+	if (start_pos < 192 && (w.ui64[2] >> (start_pos % 64))) {
+		return 1 + 128 + (start_pos % 64) +
+				__builtin_ctzll(w.ui64[2] >> (start_pos % 64));
+	}
+
+	if(start_pos < 192) {
+		start_pos = 192;
+	}
+
+	if (start_pos < 256 && (w.ui64[3] >> (start_pos % 64))) {
+		return 1 + 192 + (start_pos % 64) +
+				__builtin_ctzll(w.ui64[3] >> (start_pos % 64));
 	}
 
 	return 0;
@@ -190,7 +299,33 @@ int *native_index_bits(size_t nword, int *indexes, int offset) {
 
 int *word_index_bits(const bitmap_word_t word, int *indexes)
 {
-#if defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 8
+#if   defined(ENABLE_AVX)  && __SIZEOF_SIZE_T__ == 8
+	union __cast {
+		__m256i m256;
+		size_t ui64[4];
+	} w;
+	w.m256 = word;
+	indexes = native_index_bits(w.ui64[0], indexes, 0);
+	indexes = native_index_bits(w.ui64[1], indexes, 64);
+	indexes = native_index_bits(w.ui64[2], indexes, 128);
+	indexes = native_index_bits(w.ui64[3], indexes, 192);
+	return indexes;
+#elif defined(ENABLE_AVX)  && __SIZEOF_SIZE_T__ == 4
+	union __cast {
+		__m256i m256;
+		size_t ui32[8];
+	} w;
+	w.m256 = word;
+	indexes = native_index_bits(w.ui32[0], indexes, 0);
+	indexes = native_index_bits(w.ui32[1], indexes, 32);
+	indexes = native_index_bits(w.ui32[2], indexes, 64);
+	indexes = native_index_bits(w.ui32[3], indexes, 96);
+	indexes = native_index_bits(w.ui32[4], indexes, 128);
+	indexes = native_index_bits(w.ui32[5], indexes, 160);
+	indexes = native_index_bits(w.ui32[6], indexes, 192);
+	indexes = native_index_bits(w.ui32[7], indexes, 224);
+	return indexes;
+#elif defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 8
 	union __cast {
 		__m128i m128;
 		size_t ui64[2];
@@ -356,8 +491,10 @@ int bitmap_set(struct bitmap *bitmap, size_t pos, bool val)
 		}
 
 		/* resize bitmap */
-		/* align pages by 16 bytes for SSE */
-		page = memalign(16, sizeof(struct bitmap_page));
+
+		/* align pages for SSE/AVX */
+		page = memalign(BITMAP_WORD_ALIGNMENT,
+				sizeof(struct bitmap_page));
 		if (page == NULL) {
 			return -1;
 		}
