@@ -839,6 +839,23 @@ lbox_index_count(struct lua_State *L)
 	return 1;
 }
 
+#if defined(DEBUG)
+static int
+lbox_index_debug_dump(struct lua_State *L)
+{
+	Index *index = lua_checkindex(L, 1);
+	int verbose = 0;
+	int argc = lua_gettop(L) - 1;
+	if (argc == 1) {
+		verbose = luaL_checkint(L, 2);
+	}
+
+	[index debugDump: verbose];
+
+	return 0;
+}
+#endif /* defined(DEBUG) */
+
 static const struct luaL_reg lbox_index_meta[] = {
 	{"__tostring", lbox_index_tostring},
 	{"__len", lbox_index_len},
@@ -850,6 +867,9 @@ static const struct luaL_reg lbox_index_meta[] = {
 	{"next_equal", lbox_index_next_equal},
 	{"prev_equal", lbox_index_prev_equal},
 	{"count", lbox_index_count},
+	#if	defined(DEBUG)
+	{"debug_dump", lbox_index_debug_dump},
+	#endif /* defined(DEBUG) */
 	{NULL, NULL}
 };
 

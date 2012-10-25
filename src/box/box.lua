@@ -204,6 +204,9 @@ function box.on_reload_configuration()
     index_mt.count = function(index, ...)
         return index.idx:count(...)
     end
+    index_mt.debug_dump = function(index, ...)
+        return index.idx:debug_dump(...)
+    end
     --
     index_mt.select_range = function(index, limit, ...)
         local range = {}

@@ -156,6 +156,11 @@ struct index_traits
 - (void) initIteratorUnsafe: (struct iterator *) iterator
 			:(enum iterator_type) type
 			:(void *) key :(int) part_count;
+
+#if defined(DEBUG)
+- (void) debugDump:(int) verbose;
+#endif /* defined(DEBUG) */
+
 @end
 
 struct iterator {

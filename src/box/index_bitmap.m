@@ -367,6 +367,14 @@ iterator_wrapper_free(struct iterator *iterator)
 			strerror(errno));
 	}
 }
+
+#if defined(DEBUG)
+- (void) debugDump:(int) verbose
+{
+	say_debug("Debug output for bitmap index");
+	bitmap_index_dump(index, verbose, stderr);
+}
+#endif /* defined(DEBUG) */
 @end
 
 /* }}} */

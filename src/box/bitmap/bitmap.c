@@ -593,19 +593,33 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 		stat.capacity,
 		stat.pages,
 		stat.page_bit);
-	fprintf(stream, "    " "cardinality = %zu // saved\n", stat.cardinality);
-	fprintf(stream, "    " "density     = %-.4f%% (%zu / %zu)\n",
-		(float) stat.cardinality * 100.0 / (stat.capacity),
-		stat.cardinality,
-		stat.capacity
-		);
-	fprintf(stream, "    " "mem_pages   = %zu bytes // with tree data\n", stat.mem_pages);
+	fprintf(stream, "    " "cardinality = %zu // saved\n",
+		stat.cardinality);
+	if (stat.capacity > 0) {
+		fprintf(stream, "    "
+			"density     = %-.4f%% (%zu / %zu)\n",
+			(float) stat.cardinality * 100.0 / (stat.capacity),
+			stat.cardinality,
+			stat.capacity
+			);
+	} else {
+		fprintf(stream, "    "
+			"density     = undefined\n");
+	}
+	fprintf(stream, "    " "mem_pages   = %zu bytes // with tree data\n",
+		stat.mem_pages);
 	fprintf(stream, "    " "mem_other   = %zu bytes\n", stat.mem_other);
 	fprintf(stream, "    " "mem_total   = %zu bytes\n",
 		stat.mem_other + stat.mem_pages);
-	fprintf(stream, "    " "utilization = %.4f bytes per value bit\n",
-		(float) (stat.mem_other + stat.mem_pages) / stat.cardinality
-		);
+	if (stat.cardinality > 0) {
+		fprintf(stream, "    "
+			"utilization = %.4f bytes per value bit\n",
+			(float) (stat.mem_other + stat.mem_pages) /
+			stat.cardinality);
+	} else {
+		fprintf(stream, "    "
+			"utilization = undefined\n");
+	}
 
 	if (verbose > 0) {
 		fprintf(stream, "    " "pages = {\n");

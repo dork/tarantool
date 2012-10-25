@@ -261,6 +261,13 @@ check_key_parts(struct key_def *key_def,
 	[self subclassResponsibility: _cmd];
 }
 
+#if defined(DEBUG)
+- (void) debugDump:(int) verbose
+{
+	(void) verbose;
+	say_debug("Not debug output for this index");
+}
+#endif /* defined(DEBUG) */
 @end
 
 /* }}} */

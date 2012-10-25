@@ -430,13 +430,22 @@ void bitmap_index_dump(struct bitmap_index *index,
 		}
 
 		bitmap_stat(index->bitmaps[b], &stat);
-		fprintf(stream, "    "
-			"bitmap #%-6zu density = %.4f%% (%zu / %zu)\n",
-			b,
-			(float) stat.cardinality * 100.0 / (stat.capacity),
-			stat.cardinality,
-			stat.capacity
+		fprintf(stream, "    " "bitmap #%-6zu {", b);
+		if (stat.capacity > 0) {
+			fprintf(stream, "density = %.4f%% (%zu / %zu) ",
+				(float) stat.cardinality * 100.0 / (stat.capacity),
+				stat.cardinality,
+				stat.capacity
 			);
+		} else {
+			fprintf(stream, "density = undefined (%zu / %zu) ",
+				stat.cardinality,
+				stat.capacity
+			);
+		}
+		fprintf(stream, "pages = %zu", stat.pages);
+
+		fprintf(stream, "}\n");
 
 		total_cardinality += stat.cardinality;
 		total_capacity += stat.capacity;
@@ -453,22 +462,37 @@ void bitmap_index_dump(struct bitmap_index *index,
 		total_capacity,
 		total_pages,
 		stat.page_bit);
-	fprintf(stream, "    " "cardinality = %zu // saved\n",
+	fprintf(stream, "    " "cardinality = %zu // bits\n",
 		total_cardinality);
-	fprintf(stream, "    " "density     = %.4f%% (%zu / %zu)\n",
-		(float) total_cardinality * 100.0 / (total_capacity),
-		total_cardinality,
-		total_capacity
-		);
+	fprintf(stream, "    " "cardinality = %zu // values\n",
+		bitmap_cardinality(index->bitmaps[0]));
+	if (total_capacity > 0) {
+		fprintf(stream, "    "
+			"density     = %.4f%% (%zu / %zu)\n",
+			(float) total_cardinality * 100.0 / (total_capacity),
+			total_cardinality,
+			total_capacity
+			);
+	} else {
+		fprintf(stream, "    "
+			"density     = undefined\n"	);
+	}
+
 	fprintf(stream, "    " "mem_pages   = %zu bytes // with tree data\n",
 		total_mem_pages);
 	fprintf(stream, "    " "mem_other   = %zu bytes\n",
 		total_mem_other);
 	fprintf(stream, "    " "mem_total   = %zu bytes\n",
 		total_mem_other + total_mem_pages);
-	fprintf(stream, "    " "utilization = %-.4f bytes per value bit\n",
-		(float) (total_mem_other + total_mem_pages) /
-		total_cardinality);
+	if (total_cardinality > 0) {
+		fprintf(stream, "    "
+			"utilization = %-.4f bytes per value bit\n",
+			(float) (total_mem_other + total_mem_pages) /
+			total_cardinality);
+	} else {
+		fprintf(stream, "    "
+			"utilization = undefined\n");
+	}
 
 	if (verbose > 0) {
 		for (size_t b = 0; b < index->bitmaps_size; b++) {
