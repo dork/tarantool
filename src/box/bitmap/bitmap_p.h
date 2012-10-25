@@ -222,7 +222,7 @@ bitmap_word_t word_clear_bit(const bitmap_word_t word, int offset)
  */
 
 int word_find_set_bit(const bitmap_word_t word, int start_pos);
-int *word_index_bits(const bitmap_word_t word, int *indexes);
+int *word_index_bits(const bitmap_word_t word, int *indexes, int offset);
 
 #if defined(DEBUG)
 const char *word_str(bitmap_word_t word);

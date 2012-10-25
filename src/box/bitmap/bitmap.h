@@ -100,4 +100,26 @@ enum bitmap_binary_op {
 	BITMAP_OP_XNOR  = 0x6 << 8
 };
 
+
+#if defined(DEBUG)
+struct bitmap_stat {
+	bool have_avx:1;
+	bool have_sse2:1;
+	bool have_ctz:1;
+	bool have_popcnt:1;
+	int word_bit;
+	int page_bit;
+	int words_per_page;
+	size_t cardinality;
+	size_t capacity;
+	size_t pages;
+	size_t mem_pages;
+	size_t mem_other;
+};
+
+#include <stdio.h>
+void bitmap_stat(struct bitmap *bitmap, struct bitmap_stat *stat);
+void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream);
+#endif
+
 #endif // BITMAP_BITMAP_H_INCLUDED

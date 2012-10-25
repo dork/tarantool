@@ -297,7 +297,7 @@ int *native_index_bits(size_t nword, int *indexes, int offset) {
 #endif
 }
 
-int *word_index_bits(const bitmap_word_t word, int *indexes)
+int *word_index_bits(const bitmap_word_t word, int *indexes, int offset)
 {
 #if   defined(ENABLE_AVX)  && __SIZEOF_SIZE_T__ == 8
 	union __cast {
@@ -305,10 +305,10 @@ int *word_index_bits(const bitmap_word_t word, int *indexes)
 		size_t ui64[4];
 	} w;
 	w.m256 = word;
-	indexes = native_index_bits(w.ui64[0], indexes, 0);
-	indexes = native_index_bits(w.ui64[1], indexes, 64);
-	indexes = native_index_bits(w.ui64[2], indexes, 128);
-	indexes = native_index_bits(w.ui64[3], indexes, 192);
+	indexes = native_index_bits(w.ui64[0], indexes, offset + 0);
+	indexes = native_index_bits(w.ui64[1], indexes, offset + 64);
+	indexes = native_index_bits(w.ui64[2], indexes, offset + 128);
+	indexes = native_index_bits(w.ui64[3], indexes, offset + 192);
 	return indexes;
 #elif defined(ENABLE_AVX)  && __SIZEOF_SIZE_T__ == 4
 	union __cast {
@@ -316,14 +316,14 @@ int *word_index_bits(const bitmap_word_t word, int *indexes)
 		size_t ui32[8];
 	} w;
 	w.m256 = word;
-	indexes = native_index_bits(w.ui32[0], indexes, 0);
-	indexes = native_index_bits(w.ui32[1], indexes, 32);
-	indexes = native_index_bits(w.ui32[2], indexes, 64);
-	indexes = native_index_bits(w.ui32[3], indexes, 96);
-	indexes = native_index_bits(w.ui32[4], indexes, 128);
-	indexes = native_index_bits(w.ui32[5], indexes, 160);
-	indexes = native_index_bits(w.ui32[6], indexes, 192);
-	indexes = native_index_bits(w.ui32[7], indexes, 224);
+	indexes = native_index_bits(w.ui32[0], indexes, offset + 0);
+	indexes = native_index_bits(w.ui32[1], indexes, offset + 32);
+	indexes = native_index_bits(w.ui32[2], indexes, offset + 64);
+	indexes = native_index_bits(w.ui32[3], indexes, offset + 96);
+	indexes = native_index_bits(w.ui32[4], indexes, offset + 128);
+	indexes = native_index_bits(w.ui32[5], indexes, offset + 160);
+	indexes = native_index_bits(w.ui32[6], indexes, offset + 192);
+	indexes = native_index_bits(w.ui32[7], indexes, offset + 224);
 	return indexes;
 #elif defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 8
 	union __cast {
@@ -331,8 +331,8 @@ int *word_index_bits(const bitmap_word_t word, int *indexes)
 		size_t ui64[2];
 	} w;
 	w.m128 = word;
-	indexes = native_index_bits(w.ui64[0], indexes, 0);
-	indexes = native_index_bits(w.ui64[1], indexes, 64);
+	indexes = native_index_bits(w.ui64[0], indexes, offset + 0);
+	indexes = native_index_bits(w.ui64[1], indexes, offset + 64);
 	return indexes;
 #elif defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 4
 	union __cast {
@@ -340,14 +340,14 @@ int *word_index_bits(const bitmap_word_t word, int *indexes)
 		size_t ui32[4];
 	} w;
 	w.m128 = word;
-	indexes = native_index_bits(w.ui32[0], indexes, 0);
-	indexes = native_index_bits(w.ui32[1], indexes, 32);
-	indexes = native_index_bits(w.ui32[2], indexes, 64);
-	indexes = native_index_bits(w.ui32[3], indexes, 96);
+	indexes = native_index_bits(w.ui32[0], indexes, offset + 0);
+	indexes = native_index_bits(w.ui32[1], indexes, offset + 32);
+	indexes = native_index_bits(w.ui32[2], indexes, offset + 64);
+	indexes = native_index_bits(w.ui32[3], indexes, offset + 96);
 	return indexes;
 #else /* !defined(HAVE_SSE2) */
 	/* bitmap_word_t is size_t */
-	return native_index_bits(word, indexes, 0);
+	return native_index_bits(word, indexes, offset + 0);
 #endif
 }
 
@@ -535,29 +535,124 @@ size_t bitmap_cardinality(struct bitmap *bitmap) {
 	return bitmap->cardinality;
 }
 
+#if defined(DEBUG)
+void bitmap_stat(struct bitmap *bitmap, struct bitmap_stat *stat) {
+	memset(stat, 0, sizeof(*stat));
 
-#ifdef DEBUG
-void bitmap_debug_print(struct bitmap *bitmap) {
-	printf("Bitmap {\n");
+#if	defined(ENABLE_AVX)
+	stat->have_avx = true;
+#endif
+#if	defined(ENABLE_SSE2)
+	stat->have_sse2 = true;
+#endif
+#if	(defined(HAVE_CTZLL) && __SIZEOF_SIZE_T__ == 8) || \
+	(defined(HAVE_CTZ) && __SIZEOF_SIZE_T__ == 4)
+	stat->have_ctz = true;
+#endif
+#if	(defined(HAVE_POPCNTLL) && __SIZEOF_SIZE_T__ == 8) || \
+	(defined(HAVE_POPCNT) && __SIZEOF_SIZE_T__ == 4)
+	stat->have_popcnt = true;
+#endif
+	stat->word_bit = BITMAP_WORD_BIT;
+	stat->page_bit = BITMAP_PAGE_BIT;
+	stat->words_per_page = BITMAP_WORDS_PER_PAGE;
+	stat->cardinality = bitmap->cardinality;
+
+	stat->capacity = 0;
+	stat->pages = 0;
 	struct bitmap_page *page = NULL;
 	RB_FOREACH(page, bitmap_pages_tree, &(bitmap->pages)) {
-		size_t page_first_pos = page->first_pos;
-		size_t page_last_pos = page_first_pos +
-				BITMAP_PAGE_BIT;
+		stat->pages++;
+	}
+	stat->capacity = stat->pages * BITMAP_PAGE_BIT;
 
-		printf("    [%zu, %zu) ", page_first_pos, page_last_pos);
+	stat->mem_pages = stat->pages * sizeof(struct bitmap_page);
+	stat->mem_other = sizeof(struct bitmap);
+}
 
-		size_t size = BITMAP_WORDS_PER_PAGE * sizeof(bitmap_word_t);
-		size_t pos = 0;
-		while (find_next_set_bit(page->words, size, &pos) == 0) {
-			printf("%zu ", page_first_pos + pos);
-			pos++;
+void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
+	struct bitmap_stat stat;
+	bitmap_stat(bitmap, &stat);
+
+	fprintf(stream, "Bitmap %p\n", bitmap);
+	fprintf(stream, "{\n");
+	fprintf(stream, "    " "features    = ");
+	fprintf(stream, "%cAVX ", stat.have_avx ? '+' : '-');
+	fprintf(stream, "%cSSE2 ", stat.have_sse2 ? '+' : '-');
+	fprintf(stream, "%cCTZ ", stat.have_ctz ? '+' : '-');
+	fprintf(stream, "%cPOPCNT ", stat.have_popcnt ? '+' : '-');
+	fprintf(stream, "\n");
+	fprintf(stream, "    " "word_bit    = %d\n", stat.word_bit);
+	fprintf(stream, "    " "page_bit    = %d * %d = %d\n",
+		stat.words_per_page,
+		stat.word_bit,
+		stat.page_bit);
+
+	fprintf(stream, "    " "pages       = %zu\n", stat.pages);
+	fprintf(stream, "    " "capacity    = %zu (%zu * %d)\n",
+		stat.capacity,
+		stat.pages,
+		stat.page_bit);
+	fprintf(stream, "    " "cardinality = %zu // saved\n", stat.cardinality);
+	fprintf(stream, "    " "density     = %2.4f%% (%zu / %zu)\n",
+		(float) stat.cardinality * 100.0 / (stat.capacity),
+		stat.cardinality,
+		stat.capacity
+		);
+	fprintf(stream, "    " "mem_pages   = %zu bytes // with tree data\n", stat.mem_pages);
+	fprintf(stream, "    " "mem_other   = %zu bytes\n", stat.mem_other);
+	fprintf(stream, "    " "mem_total   = %zu bytes\n",
+		stat.mem_other + stat.mem_pages);
+	fprintf(stream, "    " "utilization = %2.4f bytes per value\n",
+		(float) (stat.mem_other + stat.mem_pages) / stat.cardinality
+		);
+
+	if (verbose > 0) {
+		fprintf(stream, "    " "pages = {\n");
+
+		size_t total_cardinality = 0;
+		struct bitmap_page *page = NULL;
+		RB_FOREACH(page, bitmap_pages_tree, &(bitmap->pages)) {
+			size_t page_last_pos = page->first_pos +
+					BITMAP_PAGE_BIT;
+
+			fprintf(stream, "        " "[%zu, %zu) ",
+				page->first_pos, page_last_pos);
+
+			int indexes[BITMAP_PAGE_BIT + 1];
+			int *iter = indexes;
+			for (size_t w = 0; w < BITMAP_WORDS_PER_PAGE; w++) {
+				iter = word_index_bits(page->words[w], iter,
+					page->first_pos + w * BITMAP_WORD_BIT);
+			}
+
+			size_t page_cardinality = (iter - indexes);
+			total_cardinality += page_cardinality;
+
+			fprintf(stream, "u = %zu/%d",
+				page_cardinality, BITMAP_PAGE_BIT);
+
+			if (verbose <= 1) {
+				fprintf(stream, "\n");
+				continue;
+			}
+			fprintf(stream, " ");
+
+			fprintf(stream, "v = {");
+			for (size_t i = 0; i < BITMAP_PAGE_BIT &&
+			     indexes[i] != 0; i++) {
+				printf("%zu, ", page->first_pos + indexes[i]);
+			}
+			fprintf(stream, "}\n");
 		}
 
-		printf("\n");
+		fprintf(stream, "    " "}\n");
+		fprintf(stream, "    " "cardinality = %zu // calculated\n",
+			total_cardinality);
 	}
 
-	printf("}\n");
+	fprintf(stream, "}\n");
 }
-#endif /* def DEBUG */
+
+#endif /* defined(DEBUG) */
 /* }}} */

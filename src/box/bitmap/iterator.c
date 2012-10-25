@@ -304,7 +304,7 @@ int next_word(struct bitmap_iterator *it) {
 		int rc = next_word_in_group(it->groups[0], it->states[0],
 				&(it->cur_pos), &(word));
 		if (rc == 0) {
-			word_index_bits(word, it->indexes);
+			word_index_bits(word, it->indexes, 0);
 			it->indexes_pos = 0;
 			return 0;
 		} else {
@@ -338,7 +338,7 @@ int next_word(struct bitmap_iterator *it) {
 
 		/* Exit if all groups are in same position */
 		if (offset_max == it->cur_pos) {
-			word_index_bits(word, it->indexes);
+			word_index_bits(word, it->indexes, 0);
 			it->indexes_pos = 0;
 			return 0;
 		}
