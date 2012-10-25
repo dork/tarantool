@@ -594,7 +594,7 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 		stat.pages,
 		stat.page_bit);
 	fprintf(stream, "    " "cardinality = %zu // saved\n", stat.cardinality);
-	fprintf(stream, "    " "density     = %2.4f%% (%zu / %zu)\n",
+	fprintf(stream, "    " "density     = %-.4f%% (%zu / %zu)\n",
 		(float) stat.cardinality * 100.0 / (stat.capacity),
 		stat.cardinality,
 		stat.capacity
@@ -603,7 +603,7 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 	fprintf(stream, "    " "mem_other   = %zu bytes\n", stat.mem_other);
 	fprintf(stream, "    " "mem_total   = %zu bytes\n",
 		stat.mem_other + stat.mem_pages);
-	fprintf(stream, "    " "utilization = %2.4f bytes per value\n",
+	fprintf(stream, "    " "utilization = %.4f bytes per value bit\n",
 		(float) (stat.mem_other + stat.mem_pages) / stat.cardinality
 		);
 
@@ -629,7 +629,7 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 			size_t page_cardinality = (iter - indexes);
 			total_cardinality += page_cardinality;
 
-			fprintf(stream, "u = %zu/%d",
+			fprintf(stream, "util = %zu/%d",
 				page_cardinality, BITMAP_PAGE_BIT);
 
 			if (verbose <= 1) {
@@ -638,7 +638,7 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 			}
 			fprintf(stream, " ");
 
-			fprintf(stream, "v = {");
+			fprintf(stream, "vals = {");
 			for (size_t i = 0; i < BITMAP_PAGE_BIT &&
 			     indexes[i] != 0; i++) {
 				printf("%zu, ", page->first_pos + indexes[i]);

@@ -111,4 +111,12 @@ bool bitmap_index_contains_value(struct bitmap_index *index, size_t value);
  */
 size_t bitmap_index_size(struct bitmap_index *index);
 
+
+#if defined(DEBUG)
+/* TODO: implement bitmap_index_stat */
+void bitmap_index_dump(struct bitmap_index *index,
+		       int verbose, FILE *stream);
+
+#endif /* defined(DEBUG) */
+
 #endif // BITMAP_INDEX_H_INCLUDED

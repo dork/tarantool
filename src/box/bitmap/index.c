@@ -391,3 +391,96 @@ size_t bitmap_index_size(struct bitmap_index *index)
 	return bitmap_cardinality(index->bitmaps[0]);
 }
 
+#if defined(DEBUG)
+void bitmap_index_dump(struct bitmap_index *index,
+		       int verbose, FILE *stream)
+{
+	struct bitmap_stat stat;
+	bitmap_stat(index->bitmaps[0], &stat);
+
+	fprintf(stream, "BitmapIndex %p\n", index);
+	fprintf(stream, "{\n");
+	fprintf(stream, "    " "features    = ");
+	fprintf(stream, "%cAVX ", stat.have_avx ? '+' : '-');
+	fprintf(stream, "%cSSE2 ", stat.have_sse2 ? '+' : '-');
+	fprintf(stream, "%cCTZ ", stat.have_ctz ? '+' : '-');
+	fprintf(stream, "%cPOPCNT ", stat.have_popcnt ? '+' : '-');
+	fprintf(stream, "\n");
+	fprintf(stream, "    " "word_bit    = %d\n", stat.word_bit);
+	fprintf(stream, "    " "page_bit    = %d * %d = %d\n",
+		stat.words_per_page,
+		stat.word_bit,
+		stat.page_bit);
+
+	fprintf(stream, "    "
+		"// bitmap #0 set for each value in the index\n");
+	fprintf(stream, "    "
+		"// bitmap #(i) => bit #(i-1) in key\n");
+
+	/* can overflow, but what can i do? */
+	size_t total_capacity = 0;
+	size_t total_cardinality = 0;
+	size_t total_mem_pages = 0;
+	size_t total_mem_other = 0;
+	size_t total_pages = 0;
+
+	for (size_t b = 0; b < index->bitmaps_size; b++) {
+		if (index->bitmaps[b] == NULL) {
+			continue;
+		}
+
+		bitmap_stat(index->bitmaps[b], &stat);
+		fprintf(stream, "    "
+			"bitmap #%-6zu density = %.4f%% (%zu / %zu)\n",
+			b,
+			(float) stat.cardinality * 100.0 / (stat.capacity),
+			stat.cardinality,
+			stat.capacity
+			);
+
+		total_cardinality += stat.cardinality;
+		total_capacity += stat.capacity;
+		total_mem_pages += stat.mem_pages;
+		total_mem_other += stat.mem_other;
+		total_pages += stat.pages;
+	}
+
+	total_mem_other += sizeof(struct bitmap_index) +
+			sizeof(struct bitmap*) * index->bitmaps_size;
+
+	fprintf(stream, "    " "pages       = %zu\n", total_pages);
+	fprintf(stream, "    " "capacity    = %zu (%zu * %d)\n",
+		total_capacity,
+		total_pages,
+		stat.page_bit);
+	fprintf(stream, "    " "cardinality = %zu // saved\n",
+		total_cardinality);
+	fprintf(stream, "    " "density     = %.4f%% (%zu / %zu)\n",
+		(float) total_cardinality * 100.0 / (total_capacity),
+		total_cardinality,
+		total_capacity
+		);
+	fprintf(stream, "    " "mem_pages   = %zu bytes // with tree data\n",
+		total_mem_pages);
+	fprintf(stream, "    " "mem_other   = %zu bytes\n",
+		total_mem_other);
+	fprintf(stream, "    " "mem_total   = %zu bytes\n",
+		total_mem_other + total_mem_pages);
+	fprintf(stream, "    " "utilization = %-.4f bytes per value bit\n",
+		(float) (total_mem_other + total_mem_pages) /
+		total_cardinality);
+
+	if (verbose > 0) {
+		for (size_t b = 0; b < index->bitmaps_size; b++) {
+			if (index->bitmaps[b] == NULL) {
+				continue;
+			}
+
+			fprintf(stream, "bit #%-6zu dump\n", b);
+			bitmap_dump(index->bitmaps[b], verbose, stream);
+		}
+	}
+	fprintf(stream, "}\n");
+}
+
+#endif /* defined(DEBUG) */
