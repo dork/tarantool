@@ -32,6 +32,7 @@
 #include <string.h>
 #include <errno.h> // for tnt_raise messages
 
+#include "salloc.h"
 #include "tuple.h"
 #include "space.h"
 #include "exception.h"
@@ -45,17 +46,17 @@ static struct index_traits bitmap_index_traits = {
 	.allows_partial_key = false,
 };
 
-/* tuple size is >= 12 bytes */
-static const size_t PTR_SHIFT = (CHAR_BIT == 8) ? 3 : 0;
-
 inline
 size_t tuple_to_value(struct tuple *tuple) {
-	return (size_t) tuple >> PTR_SHIFT;
+	size_t value = salloc_ptr_to_index(tuple);
+	assert(salloc_ptr_from_index(value) == tuple);
+
+	return value;
 }
 
 inline
 struct tuple *value_to_tuple(size_t value) {
-	return (struct tuple *) (value << PTR_SHIFT);
+	return salloc_ptr_from_index(value);
 }
 
 inline

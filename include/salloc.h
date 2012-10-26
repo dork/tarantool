@@ -60,4 +60,34 @@ typedef int (*salloc_stat_cb)(const struct slab_class_stats *st, void *ctx);
 int
 salloc_stat(salloc_stat_cb cb, struct slab_arena_stats *astat, void *cb_ctx);
 
+/**
+ * @brief Returns an unique index associated with a chunk allocated by salloc.
+ * The index space is more dense than pointers space, especially in the less
+ * significant bits of values. These methods are needed because we can not
+ * simple enumerate sequentially all allocated tuples in the runtime.
+ * Some types of indexes (e.g. BITMAP) have better performance if it operates
+ * with sequencial offsets (i.e. dense space) instead of pointers(sparse space).
+ *
+ * The index calculated based on SLAB number and item position within it.
+ * Current implementation only guarantees that adjacent chunks from
+ * one SLAB will have consecutive indexes. In other words, of two
+ * chunks were sequencially allocated from one chunk they will have
+ * sequencial ids. If second chunk was allocated from another SLAB thеn
+ * difference between indexes may be more then one.
+ *
+ * @param ptr pointer to memory allocated by salloc
+ * @see bitmap_index
+ * @return unique index
+ */
+size_t salloc_ptr_to_index(void *ptr);
+
+/**
+ * @brief Performs the opposite action of a salloc_ptr_to_index.
+ * @param index unique index
+ * @see salloc_ptr_to_index
+ * @see bitmap_index
+ * @return point to memory area associated with this index.
+ */
+void  *salloc_ptr_from_index(size_t index);
+
 #endif /* TARANTOOL_SALLOC_H_INCLUDED */
