@@ -589,22 +589,22 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 		stat.page_bit);
 
 	fprintf(stream, "    " "pages       = %zu\n", stat.pages);
+	fprintf(stream, "    " "cardinality = %zu // saved\n",
+		stat.cardinality);
 	fprintf(stream, "    " "capacity    = %zu (%zu * %d)\n",
 		stat.capacity,
 		stat.pages,
 		stat.page_bit);
-	fprintf(stream, "    " "cardinality = %zu // saved\n",
-		stat.cardinality);
 	if (stat.capacity > 0) {
 		fprintf(stream, "    "
-			"density     = %-.4f%% (%zu / %zu)\n",
+			"utilization = %-8.4f%% (%zu / %zu)\n",
 			(float) stat.cardinality * 100.0 / (stat.capacity),
 			stat.cardinality,
 			stat.capacity
 			);
 	} else {
 		fprintf(stream, "    "
-			"density     = undefined\n");
+			"utilization = undefined\n");
 	}
 	fprintf(stream, "    " "mem_pages   = %zu bytes // with tree data\n",
 		stat.mem_pages);
@@ -613,12 +613,12 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 		stat.mem_other + stat.mem_pages);
 	if (stat.cardinality > 0) {
 		fprintf(stream, "    "
-			"utilization = %.4f bytes per value bit\n",
+			"density     = %-8.4f bytes per value\n",
 			(float) (stat.mem_other + stat.mem_pages) /
 			stat.cardinality);
 	} else {
 		fprintf(stream, "    "
-			"utilization = undefined\n");
+			"density     = undefined\n");
 	}
 
 	if (verbose > 0) {
@@ -643,7 +643,8 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 			size_t page_cardinality = (iter - indexes);
 			total_cardinality += page_cardinality;
 
-			fprintf(stream, "util = %zu/%d",
+			fprintf(stream, "utilization = %8.4f%% (%zu/%d)",
+				(float) page_cardinality*1e2 / BITMAP_PAGE_BIT,
 				page_cardinality, BITMAP_PAGE_BIT);
 
 			if (verbose <= 1) {
@@ -655,7 +656,8 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 			fprintf(stream, "vals = {");
 			for (size_t i = 0; i < BITMAP_PAGE_BIT &&
 			     indexes[i] != 0; i++) {
-				printf("%zu, ", page->first_pos + indexes[i]);
+				fprintf(stream, "%zu, ",
+					page->first_pos + indexes[i]);
 			}
 			fprintf(stream, "}\n");
 		}
