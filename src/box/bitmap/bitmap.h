@@ -34,8 +34,8 @@
  * @brief Module to work with arrays of bits (bitmaps)
  * @author Roman Tsisyk
  */
-#include <stddef.h>
-#include <stdbool.h>
+
+#include <util.h>
 
 /**
  * Bitmap object

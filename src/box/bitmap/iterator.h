@@ -34,6 +34,9 @@
  * @brief Iterator for bitmap object.
  * @author Roman Tsisyk
  */
+
+#include <util.h>
+
 #include "bitmap.h"
 
 /**

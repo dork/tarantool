@@ -34,34 +34,38 @@
  * SUCH DAMAGE.
  */
 
-/* TODO(roman): update CMakeLists.txt */
-//#define ENABLE_AVX    1
-#define ENABLE_SSE2   1
-#define HAVE_POPCNTLL 1
-#define HAVE_POPCNT   1
-#define HAVE_CTZLL    1
-#define HAVE_CTZ      1
-
-#include "third_party/tree.h"
+#include <util.h>
 
 #include <stdlib.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
 #include <limits.h>
-#include <assert.h>
+
+#include <third_party/tree.h>
+
+#include "bit.h"
 
 #if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
 #include <immintrin.h>
 #endif /* defined(ENABLE_SSE2) || defined(ENABLE_AVX) */
 
+#if   defined(ENABLE_AVX) && !defined(ENABLE_SSE2)
+#error ENABLE_SSE2 must be also defined since ENABLE_AVX is defined
+#endif
+
 #if   defined(ENABLE_AVX)
-typedef __m256i bitmap_word_t;
+typedef __m256i u256;
+#endif
+
+#if   defined(ENABLE_SSE2)
+typedef __m128i u128;
+#endif
+
+#if   defined(ENABLE_AVX)
+typedef u256 bitmap_word_t;
 #define __BITMAP_WORD_BIT 256
 #define BITMAP_WORD_ALIGNMENT 32
 #elif defined(ENABLE_SSE2)
-typedef __m128i bitmap_word_t;
+#warning SSE
+typedef u128 bitmap_word_t;
 #define __BITMAP_WORD_BIT 128
 #define BITMAP_WORD_ALIGNMENT 16
 #else /* !defined(ENABLE_SSE2) && !defined(ENABLE_AVX) */
@@ -222,7 +226,7 @@ bitmap_word_t word_clear_bit(const bitmap_word_t word, int offset)
  */
 
 int word_find_set_bit(const bitmap_word_t word, int start_pos);
-int *word_index_bits(const bitmap_word_t word, int *indexes, int offset);
+int *word_index(const bitmap_word_t word, int *indexes, int offset);
 
 #if defined(DEBUG)
 const char *word_str(bitmap_word_t word);

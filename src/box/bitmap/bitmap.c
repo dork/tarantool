@@ -28,17 +28,10 @@
  */
 
 #include "bitmap.h"
-
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <limits.h>
-#include <stdio.h>
-#include <malloc.h>
-#include <assert.h>
-#include <errno.h>
-
 #include "bitmap_p.h"
+
+#include <malloc.h>
+#include <errno.h>
 
 #if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
 bitmap_word_t word_bitmask(int offset)
@@ -109,245 +102,84 @@ bitmap_word_t word_bitmask(int offset)
 }
 #endif /* defined(ENABLE_SSE2) || defined(ENABLE_AVX) */
 
-int word_find_set_bit(const bitmap_word_t word, int start_pos)
+#if   defined(ENABLE_AVX)
+static inline
+int *bit_index_u256(const u256 x, int *indexes, int offset)
 {
-#if !defined(ENABLE_SSE2) && (__SIZEOF_SIZE_T__ == 8) && HAVE_CTZLL
-	if (start_pos < 64 && !word_test_zeros(word >> start_pos)) {
-		return 1 + start_pos + __builtin_ctzll(word >> start_pos);
-	}
-
-	return 0;
-#elif   !defined(ENABLE_SSE2) && (__SIZEOF_SIZE_T__ == 4) && HAVE_CTZ
-	if (start_pos < 32 && !word_test_zeros(word >> start_pos)) {
-		return 1 + start_pos + __builtin_ctz(word >> start_pos);
-	}
-
-	return 0;
-#elif  defined(ENABLE_AVX) && (__SIZEOF_SIZE_T__ == 8) && HAVE_CTZLL
+#if   WORD_BIT == 64
 	union __cast {
-		__m256i m256;
-		uint64_t ui64[4];
+		u256 u256;
+		u64  u64[4];
 	} w;
-	w.m256 = word;
-
-	if (start_pos < 64 && (w.ui64[0] >> start_pos)) {
-		return 1 + start_pos +
-				__builtin_ctzll(w.ui64[0] >> (start_pos));
-	}
-
-	if(start_pos < 64) {
-		start_pos = 64;
-	}
-
-	if (start_pos < 128 && (w.ui64[1] >> (start_pos % 64))) {
-		return 1 + 64 + (start_pos % 64) +
-				__builtin_ctzll(w.ui64[1] >> (start_pos % 64));
-	}
-
-	if(start_pos < 128) {
-		start_pos = 128;
-	}
-
-	if (start_pos < 192 && (w.ui64[2] >> (start_pos % 64))) {
-		return 1 + 128 + (start_pos % 64) +
-				__builtin_ctzll(w.ui64[2] >> (start_pos % 64));
-	}
-
-	if(start_pos < 192) {
-		start_pos = 192;
-	}
-
-	if (start_pos < 256 && (w.ui64[3] >> (start_pos % 64))) {
-		return 1 + 192 + (start_pos % 64) +
-				__builtin_ctzll(w.ui64[3] >> (start_pos % 64));
-	}
-
-	return 0;
-#elif  defined(ENABLE_SSE2) && (__SIZEOF_SIZE_T__ == 8) && HAVE_CTZLL
-	/*
-	if (word_test_zeros(word)) {
-		return 0;
-	}
-	*/
-
+	w.u256 = x;
+	indexes = bit_index_u64(w.u64[0], indexes, offset + 0);
+	indexes = bit_index_u64(w.u64[1], indexes, offset + 64);
+	indexes = bit_index_u64(w.u64[2], indexes, offset + 128);
+	indexes = bit_index_u64(w.u64[3], indexes, offset + 192);
+	return indexes;
+#elif WORD_BIT == 32
 	union __cast {
-		__m128i m128;
-		uint64_t ui64[2];
+		u256 u256;
+		u32 u32[8];
 	} w;
-	w.m128 = word;
-
-	if (start_pos < 64 && (w.ui64[0] >> start_pos)) {
-		return 1 + start_pos +
-				__builtin_ctzll(w.ui64[0] >> (start_pos));
-	}
-
-	if(start_pos < 64) {
-		start_pos = 64;
-	}
-
-	if (start_pos < 128 && (w.ui64[1] >> (start_pos % 64))) {
-		return 1 + 64 + (start_pos % 64) +
-				__builtin_ctzll(w.ui64[1] >> (start_pos % 64));
-	}
-
-	return 0;
-#elif  defined(ENABLE_SSE2) && (__SIZEOF_SIZE_T__ == 4) && HAVE_CTZ
-	if (word_test_zeros(word)) {
-		return 0;
-	}
-
-	union __cast {
-		__m128i m128;
-		uint32_t ui32[4];
-	} w;
-	w.m128 = word;
-
-	if (start_pos < 32 && (w.ui32[0] >> start_pos)) {
-		return 1 + start_pos +
-				__builtin_ctz(w.ui32[0] >> (start_pos));
-	}
-
-	if (start_pos < 32) {
-		start_pos = 32;
-	}
-
-	if (start_pos < 64 && (w.ui32[1] >> (start_pos % 32))) {
-		return 1 + 32 + (start_pos % 32) +
-				__builtin_ctz(w.ui32[1] >> (start_pos % 32));
-	}
-
-	if (start_pos < 64) {
-		start_pos = 64;
-	}
-
-	if (start_pos < 96 && (w.ui32[2] >> (start_pos % 32))) {
-		return 1 + 64 + (start_pos % 32) +
-				__builtin_ctz(w.ui32[2] >> (start_pos % 32));
-	}
-
-	if (start_pos < 96) {
-		start_pos = 96;
-	}
-
-	if (start_pos < 128 && (w.ui32[3] >> (start_pos % 32))) {
-		return 1 + 96 + (start_pos % 32) +
-				__builtin_ctz(w.ui32[3] >> (start_pos % 32));
-	}
-
-	return 0;
+	w.u256 = x;
+	indexes = bit_index_u32(w.u32[0], indexes, offset + 0);
+	indexes = bit_index_u32(w.u32[1], indexes, offset + 32);
+	indexes = bit_index_u32(w.u32[2], indexes, offset + 64);
+	indexes = bit_index_u32(w.u32[3], indexes, offset + 96);
+	indexes = bit_index_u32(w.u32[4], indexes, offset + 128);
+	indexes = bit_index_u32(w.u32[5], indexes, offset + 160);
+	indexes = bit_index_u32(w.u32[6], indexes, offset + 192);
+	indexes = bit_index_u32(w.u32[7], indexes, offset + 224);
+	return indexes;
 #else
-	for (int pos = start_pos; pos < BITMAP_WORD_BIT; pos++) {
-		if (word_test_bit(word, pos)) {
-			return pos + 1;
-		}
-	}
-
-	return 0;
+#error Unsupported WORD_BIT
 #endif
 }
-
-static
-int *native_index_bits(size_t nword, int *indexes, int offset) {
-#if  (__SIZEOF_SIZE_T__ == 8 && defined(HAVE_CTZLL)) || \
-     (__SIZEOF_SIZE_T__ == 4 && defined(HAVE_CTZ))
-
-	int prev_pos = 0;
-	int i = 0;
-
-#if   (__SIZEOF_SIZE_T__ == 8 && defined(HAVE_POPCNTLL))
-	/* fast implementation using hardware popcount instruction (64 bit) */
-	const int count = __builtin_popcountll(nword);
-	while (i < count) {
-#elif (__SIZEOF_SIZE_T__ == 4 && defined(HAVE_POPCNT))
-	/* fast implementation using hardware popcount instruction (32 bit) */
-	const int count = __builtin_popcount(nword);
-	while (i < count) {
-#else
-	/* use sligtly slower implementation without popcnt */
-	while(nword) {
 #endif
-#if __SIZEOF_SIZE_T__ == 8
-		/* use hardware bsf (64 bit) */
-		const int a = __builtin_ctzll(nword);
+
+#if   defined(ENABLE_SSE2)
+static inline
+int *bit_index_u128(const u128 x, int *indexes, int offset)
+{
+#if   WORD_BIT == 64
+	union __cast {
+		u128 u128;
+		u64 u64[2];
+	} w;
+	w.u128 = x;
+	indexes = bit_index_u64(w.u64[0], indexes, offset + 0);
+	indexes = bit_index_u64(w.u64[1], indexes, offset + 64);
+	return indexes;
+#elif WORD_BIT == 32
+	union __cast {
+		u128 u128;
+		u32 u32[4];
+	} w;
+	w.u128 = x;
+	indexes = bit_index_u32(w.u32[0], indexes, offset + 0);
+	indexes = bit_index_u32(w.u32[1], indexes, offset + 32);
+	indexes = bit_index_u32(w.u32[2], indexes, offset + 64);
+	indexes = bit_index_u32(w.u32[3], indexes, offset + 96);
+	return indexes;
 #else
-		/* use hardware bsf (32 bit) */
-		const int a = __builtin_ctz(nword);
-#endif
-		prev_pos += a + 1;
-		nword >>= a;
-		nword >>= 1;
-		indexes[i++] = offset + prev_pos;
-	}
-
-	indexes[i] = 0;
-	return indexes + i;
-#else /* !defined(HAVE_CTZ) */
-	/* naive generic implementation, worst case */
-	size_t bit = 1;
-	int i = 0;
-	for (int k = 0; k < (__SIZEOF_SIZE_T__ * CHAR_BIT); k++) {
-		if (nword & bit) {
-			indexes[i++] = offset + k + 1;
-		}
-		bit <<= 1;
-	}
-
-	indexes[i] = 0;
-	return indexes + i;
+#error Unsupported WORD_BIT
 #endif
 }
+#endif
 
-int *word_index_bits(const bitmap_word_t word, int *indexes, int offset)
+int *word_index(const bitmap_word_t word, int *indexes, int offset)
 {
-#if   defined(ENABLE_AVX)  && __SIZEOF_SIZE_T__ == 8
-	union __cast {
-		__m256i m256;
-		size_t ui64[4];
-	} w;
-	w.m256 = word;
-	indexes = native_index_bits(w.ui64[0], indexes, offset + 0);
-	indexes = native_index_bits(w.ui64[1], indexes, offset + 64);
-	indexes = native_index_bits(w.ui64[2], indexes, offset + 128);
-	indexes = native_index_bits(w.ui64[3], indexes, offset + 192);
-	return indexes;
-#elif defined(ENABLE_AVX)  && __SIZEOF_SIZE_T__ == 4
-	union __cast {
-		__m256i m256;
-		size_t ui32[8];
-	} w;
-	w.m256 = word;
-	indexes = native_index_bits(w.ui32[0], indexes, offset + 0);
-	indexes = native_index_bits(w.ui32[1], indexes, offset + 32);
-	indexes = native_index_bits(w.ui32[2], indexes, offset + 64);
-	indexes = native_index_bits(w.ui32[3], indexes, offset + 96);
-	indexes = native_index_bits(w.ui32[4], indexes, offset + 128);
-	indexes = native_index_bits(w.ui32[5], indexes, offset + 160);
-	indexes = native_index_bits(w.ui32[6], indexes, offset + 192);
-	indexes = native_index_bits(w.ui32[7], indexes, offset + 224);
-	return indexes;
-#elif defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 8
-	union __cast {
-		__m128i m128;
-		size_t ui64[2];
-	} w;
-	w.m128 = word;
-	indexes = native_index_bits(w.ui64[0], indexes, offset + 0);
-	indexes = native_index_bits(w.ui64[1], indexes, offset + 64);
-	return indexes;
-#elif defined(ENABLE_SSE2) && __SIZEOF_SIZE_T__ == 4
-	union __cast {
-		__m128i m128;
-		size_t ui32[4];
-	} w;
-	w.m128 = word;
-	indexes = native_index_bits(w.ui32[0], indexes, offset + 0);
-	indexes = native_index_bits(w.ui32[1], indexes, offset + 32);
-	indexes = native_index_bits(w.ui32[2], indexes, offset + 64);
-	indexes = native_index_bits(w.ui32[3], indexes, offset + 96);
-	return indexes;
-#else /* !defined(HAVE_SSE2) */
-	/* bitmap_word_t is size_t */
-	return native_index_bits(word, indexes, offset + 0);
+#if     BITMAP_WORD_BIT == 32
+	return bit_index_u32(word, indexes, offset);
+#elif   BITMAP_WORD_BIT == 64
+	return bit_index_u64(word, indexes, offset);
+#elif   BITMAP_WORD_BIT == 128
+	return bit_index_u128(word, indexes, offset);
+#elif   BITMAP_WORD_BIT == 256
+	return bit_index_u256(word, indexes, offset);
+#else
+#error Unsupported WORD_BIT
 #endif
 }
 
@@ -362,9 +194,10 @@ void word_str_r(bitmap_word_t word, char *str, size_t len)
 	memset(str, '0', len);
 	str[BITMAP_WORD_BIT] = '\0';
 
-	int pos = 0;
-	while ((pos = word_find_set_bit(word, pos)) != 0) {
-		str[pos-1] = '1';
+	int indexes[BITMAP_WORD_BIT + 1];
+	word_index(page->words[w], indexes, 0);
+	for (size_t i = 0; i < BITMAP_WORD_BIT && indexes[i] != 0; i++) {
+		str[indexes[i] - 1] = '1';
 	}
 }
 
@@ -549,8 +382,8 @@ void bitmap_stat(struct bitmap *bitmap, struct bitmap_stat *stat) {
 	(defined(HAVE_CTZ) && __SIZEOF_SIZE_T__ == 4)
 	stat->have_ctz = true;
 #endif
-#if	(defined(HAVE_POPCNTLL) && __SIZEOF_SIZE_T__ == 8) || \
-	(defined(HAVE_POPCNT) && __SIZEOF_SIZE_T__ == 4)
+#if	(defined(HAVE_POPCOUNTLL) && __SIZEOF_SIZE_T__ == 8) || \
+	(defined(HAVE_POPCOUNT) && __SIZEOF_SIZE_T__ == 4)
 	stat->have_popcnt = true;
 #endif
 	stat->word_bit = BITMAP_WORD_BIT;
@@ -636,7 +469,7 @@ void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream) {
 			int indexes[BITMAP_PAGE_BIT + 1];
 			int *iter = indexes;
 			for (size_t w = 0; w < BITMAP_WORDS_PER_PAGE; w++) {
-				iter = word_index_bits(page->words[w], iter,
+				iter = word_index(page->words[w], iter,
 					page->first_pos + w * BITMAP_WORD_BIT);
 			}
 

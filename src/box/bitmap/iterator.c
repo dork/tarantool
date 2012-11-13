@@ -29,13 +29,6 @@
 
 #include "iterator.h"
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <limits.h>
-#include <stdio.h>
-#include <assert.h>
-
 #include "bitmap.h"
 #include "bitmap_p.h"
 
@@ -49,7 +42,7 @@ struct bitmap_iterator {
 
 	// bitmap_word_t cur_word;
 	size_t cur_pos;
-	int indexes[BITMAP_WORD_BIT + 1]; /* used for word_index_bits */
+	int indexes[BITMAP_WORD_BIT + 1]; /* used for word_index */
 	int indexes_pos;
 };
 
@@ -304,7 +297,7 @@ int next_word(struct bitmap_iterator *it) {
 		int rc = next_word_in_group(it->groups[0], it->states[0],
 				&(it->cur_pos), &(word));
 		if (rc == 0) {
-			word_index_bits(word, it->indexes, 0);
+			word_index(word, it->indexes, 0);
 			it->indexes_pos = 0;
 			return 0;
 		} else {
@@ -338,7 +331,7 @@ int next_word(struct bitmap_iterator *it) {
 
 		/* Exit if all groups are in same position */
 		if (offset_max == it->cur_pos) {
-			word_index_bits(word, it->indexes, 0);
+			word_index(word, it->indexes, 0);
 			it->indexes_pos = 0;
 			return 0;
 		}

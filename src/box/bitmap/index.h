@@ -36,7 +36,7 @@
  * @author Roman Tsisyk
  */
 
-#include <errno.h>
+#include <util.h>
 
 #include "bitmap.h"
 #include "iterator.h"

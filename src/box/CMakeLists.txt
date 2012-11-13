@@ -51,5 +51,6 @@ tarantool_module("box" tuple.m index.m tree.m space.m port.m request.m
     txn.m box.m ${lua_sources} box_lua.m memcached.m memcached-grammar.m
     index_bitmap.h index_bitmap.m bitmap/index.h bitmap/index.c
     bitmap/bitmap.h bitmap/bitmap.c bitmap/bitmap_p.h
-    bitmap/iterator.c bitmap/iterator.h)
+    bitmap/iterator.c bitmap/iterator.h bitmap/bit.h bitmap/bit.c
+    debug/rmalloc.c debug/rmalloc.h)
 

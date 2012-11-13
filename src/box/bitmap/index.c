@@ -29,12 +29,8 @@
 
 #include "index.h"
 
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
+#include <errno.h>
 #include <limits.h>
-#include <assert.h>
 
 #include "bitmap_p.h"
 

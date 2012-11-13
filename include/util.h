@@ -30,9 +30,22 @@
  */
 #include "config.h"
 
+/* TODO(roman): update CMakeLists.txt */
+/* #define ENABLE_AVX         1 */
+#define ENABLE_SSE2        1
+#define HAVE_CTZ           1
+#define HAVE_CTZLL         1
+#define HAVE_CLZ           1
+#define HAVE_CLZLL         1
+#define HAVE_POPCOUNT      1
+#define HAVE_POPCOUNTLL    1
+
 #include <string.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <limits.h>
 
 #ifndef NDEBUG
 #define TRASH(ptr) memset(ptr, '#', sizeof(*ptr))

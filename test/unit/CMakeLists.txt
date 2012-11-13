@@ -14,6 +14,8 @@ add_library(bitmap STATIC
     ${CMAKE_SOURCE_DIR}/src/box/bitmap/iterator.c
     ${CMAKE_SOURCE_DIR}/src/box/bitmap/index.h
     ${CMAKE_SOURCE_DIR}/src/box/bitmap/index.c
+    ${CMAKE_SOURCE_DIR}/src/box/bitmap/bit.h
+    ${CMAKE_SOURCE_DIR}/src/box/bitmap/bit.c
 )
 # Bitmap tests
 add_executable(bitmap_basic bitmap_basic.c)
