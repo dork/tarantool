@@ -6,6 +6,7 @@ include(CheckLibraryExists)
 include(CheckIncludeFile)
 include(CheckCCompilerFlag)
 include(CheckSymbolExists)
+include(CheckCSourceRuns)
 include(CheckCXXSourceRuns)
 include(TestBigEndian)
 include(CheckFunctionExists)
@@ -73,6 +74,20 @@ check_function_exists(memrchr HAVE_MEMRCHR)
 # which we use to determine the end (or beginning, actually) of
 # stack. Find whether or not it's present.
 check_library_exists("" __libc_stack_end "" HAVE_LIBC_STACK_END)
+
+# CMake's check_function_exists doesn't check builtins
+check_c_source_runs("int main(int a) { __builtin_ctz(a); return 0; }"
+    HAVE_CTZ)
+check_c_source_runs("int main(int a) { __builtin_ctzll(a); return 0; }"
+    HAVE_CTZLL)
+check_c_source_runs("int main(int a) { __builtin_clz(a); return 0; }"
+    HAVE_CLZ)
+check_c_source_runs("int main(int a) { __builtin_clzll(a); return 0; }"
+    HAVE_CLZLL)
+check_c_source_runs("int main(int a) { __builtin_popcount(a); return 0; }"
+    HAVE_POPCOUNT)
+check_c_source_runs("int main(int a) { __builtin_popcountll(a); return 0; }"
+    HAVE_POPCOUNTLL)
 
 #
 # Enable 'make TAGS' target.

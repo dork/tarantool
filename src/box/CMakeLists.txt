@@ -47,10 +47,11 @@ set_source_files_properties(memcached-grammar.m
 set_source_files_properties(memcached.m
     PROPERTIES COMPILE_FLAGS "-Wno-uninitialized")
 
+add_subdirectory(bitmap)
+
 tarantool_module("box" tuple.m index.m tree.m space.m port.m request.m
     txn.m box.m ${lua_sources} box_lua.m memcached.m memcached-grammar.m
-    index_bitmap.h index_bitmap.m bitmap/index.h bitmap/index.c
-    bitmap/bitmap.h bitmap/bitmap.c bitmap/bitmap_p.h
-    bitmap/iterator.c bitmap/iterator.h bitmap/bit.h bitmap/bit.c
-    debug/rmalloc.c debug/rmalloc.h)
+    index_bitmap.h index_bitmap.m)
+
+target_link_libraries(tarantool_box bitmap)
 

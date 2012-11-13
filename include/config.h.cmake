@@ -69,6 +69,17 @@
  * Set if this is a GNU system and libc has __libc_stack_end.
  */
 #cmakedefine HAVE_LIBC_STACK_END 1
+
+/*
+ * Set if compiler has __builtin_XXX methods.
+ */
+#cmakedefine HAVE_CTZ 1
+#cmakedefine HAVE_CTZLL 1
+#cmakedefine HAVE_CLZ 1
+#cmakedefine HAVE_CLZLL 1
+#cmakedefine HAVE_POPCOUNT 1
+#cmakedefine HAVE_POPCOUNTLL 1
+
 /*
  * Defined if this is a big-endian system.
  */

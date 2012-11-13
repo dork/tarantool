@@ -64,7 +64,6 @@ typedef u256 bitmap_word_t;
 #define __BITMAP_WORD_BIT 256
 #define BITMAP_WORD_ALIGNMENT 32
 #elif defined(ENABLE_SSE2)
-#warning SSE
 typedef u128 bitmap_word_t;
 #define __BITMAP_WORD_BIT 128
 #define BITMAP_WORD_ALIGNMENT 16
