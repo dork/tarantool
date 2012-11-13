@@ -43,4 +43,12 @@
 #define fail_if(expr) if (expr) fail(#expr, "true")
 #define fail_unless(expr) if (!(expr)) fail(#expr, "false")
 
+/* don't want to link with util.m */
+void __attribute__ ((noreturn))
+assert_fail(const char *assertion, const char *file, unsigned int line, const char *function)
+{
+    fprintf(stderr, "%s:%i: %s: assertion %s failed.\n", file, line, function, assertion);
+    abort();
+}
+
 #endif /* INCLUDES_TARANTOOL_TEST_UNIT_H */
