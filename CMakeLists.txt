@@ -90,16 +90,15 @@ check_c_source_runs("int main(int a) { __builtin_popcount(a); return 0; }"
 check_c_source_runs("int main(int a) { __builtin_popcountll(a); return 0; }"
     HAVE_POPCOUNTLL)
 
-if ((CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64") AND HAVE_SSE2)
+if ((CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64") AND CC_HAS_SSE2_INTRINSICS)
     # every amd64 supports sse2 instructions
     option(ENABLE_SSE2 "Enable compile-time SSE2 support." ON)
-    message(STATUS "SSE2 support is enabled by default on x86_64")
 else()
     option(ENABLE_SSE2 "Enable compile-time SSE2 support." OFF)
 endif()
 
 if (ENABLE_SSE2)
-    if (!HAVE_SSE2)
+    if (!CC_HAS_SSE2_INTRINSICS)
         message( SEND_ERROR "SSE2 is enabled, but is not supported by compiler.")
     else()
         set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
@@ -110,7 +109,7 @@ endif()
 option(ENABLE_AVX  "Enable compile-time AVX support." OFF)
 
 if (ENABLE_AVX)
-    if (!HAVE_AVX)
+    if (!CC_HAS_AVX_INTRINSICS)
         message(SEND_ERROR "AVX is enabled")
     else()
         set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx")
