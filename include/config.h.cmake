@@ -81,6 +81,16 @@
 #cmakedefine HAVE_POPCOUNTLL 1
 
 /*
+ * Set if SSE2 build is enabled
+ */
+#cmakedefine ENABLE_SSE2 1
+
+/*
+ * Set if AVX build is enabled
+ */
+#cmakedefine ENABLE_AVX 1
+
+/*
  * Defined if this is a big-endian system.
  */
 #cmakedefine HAVE_BYTE_ORDER_BIG_ENDIAN 1

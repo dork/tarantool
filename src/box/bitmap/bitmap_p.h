@@ -47,10 +47,6 @@
 #include <immintrin.h>
 #endif /* defined(ENABLE_SSE2) || defined(ENABLE_AVX) */
 
-#if   defined(ENABLE_AVX) && !defined(ENABLE_SSE2)
-#error ENABLE_SSE2 must be also defined since ENABLE_AVX is defined
-#endif
-
 #if   defined(ENABLE_AVX)
 typedef __m256i u256;
 #endif

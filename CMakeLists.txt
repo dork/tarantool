@@ -47,6 +47,7 @@ endif()
 include(cmake/arch.cmake)
 include(cmake/os.cmake)
 include(cmake/compiler.cmake)
+
 # 
 # Since we *optionally* build bundled libs, a direct build
 # dependency between tarantool_box and libluajit/libobjc won't
@@ -88,6 +89,35 @@ check_c_source_runs("int main(int a) { __builtin_popcount(a); return 0; }"
     HAVE_POPCOUNT)
 check_c_source_runs("int main(int a) { __builtin_popcountll(a); return 0; }"
     HAVE_POPCOUNTLL)
+
+if ((CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64") AND HAVE_SSE2)
+    # every amd64 supports sse2 instructions
+    option(ENABLE_SSE2 "Enable compile-time SSE2 support." ON)
+    message(STATUS "SSE2 support is enabled by default on x86_64")
+else()
+    option(ENABLE_SSE2 "Enable compile-time SSE2 support." OFF)
+endif()
+
+if (ENABLE_SSE2)
+    if (!HAVE_SSE2)
+        message( SEND_ERROR "SSE2 is enabled, but is not supported by compiler.")
+    else()
+        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
+        message(STATUS "SSE2 is enabled - target CPU must support it")
+    endif()
+endif()
+
+option(ENABLE_AVX  "Enable compile-time AVX support." OFF)
+
+if (ENABLE_AVX)
+    if (!HAVE_AVX)
+        message(SEND_ERROR "AVX is enabled")
+    else()
+        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx")
+        message(STATUS "AVX is enabled - target CPU must support it")
+    endif()
+endif()
+
 
 #
 # Enable 'make TAGS' target.
@@ -238,6 +268,8 @@ message (STATUS "CFLAGS:${CMAKE_C_FLAGS} ${core_cflags}")
 message (STATUS "PREFIX: ${CMAKE_INSTALL_PREFIX}")
 message (STATUS "MODULES: ${TARANTOOL_MODULES}")
 message (STATUS "ENABLE_STATIC: ${ENABLE_STATIC}")
+message (STATUS "ENABLE_SSE2: ${ENABLE_AVX}")
+message (STATUS "ENABLE_AVX: ${ENABLE_SSE2}")
 message (STATUS "ENABLE_GCOV: ${ENABLE_GCOV}")
 message (STATUS "ENABLE_TRACE: ${ENABLE_TRACE}")
 message (STATUS "ENABLE_BACKTRACE: ${ENABLE_BACKTRACE} (symbol resolve: ${HAVE_BFD})")

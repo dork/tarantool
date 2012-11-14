@@ -1,3 +1,5 @@
+include(CheckCSourceRuns)
+
 include(cmake/check_objective_c_compiler.cmake)
 
 # We support building with Clang and gcc. First check 
@@ -120,4 +122,37 @@ set (CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 #
 if (CMAKE_COMPILER_IS_GNUCC)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fobjc-exceptions")
+endif()
+
+
+#
+# Check for SSE2 instructions
+#
+if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG )
+    set(CMAKE_REQUIRED_FLAGS "-msse2")
+    check_c_source_runs("
+    #include <immintrin.h>
+
+    int main()
+    {
+    __m128i a = _mm_setzero_si128();
+    return 0;
+    }"
+    CC_HAS_SSE2_INTRINSICS)
+endif()
+
+#
+# Check for AVX instructions
+#
+if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG )
+    set(CMAKE_REQUIRED_FLAGS "-mavx")
+    check_c_source_runs("
+    #include <immintrin.h>
+
+    int main()
+    {
+    __m256i a = _mm256_setzero_si256();
+    return 0;
+    }"
+    CC_HAS_AVX_INTRINSICS)
 endif()

@@ -30,10 +30,6 @@
  */
 #include "config.h"
 
-/* TODO(roman): update CMakeLists.txt */
-/* #define ENABLE_AVX         1 */
-#define ENABLE_SSE2        1
-
 #include <string.h>
 #include <unistd.h>
 #include <inttypes.h>
