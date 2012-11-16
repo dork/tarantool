@@ -1,5 +1,5 @@
-#ifndef TARANTOOL_BOX_INDEX_BITMAP_H_INCLUDED
-#define TARANTOOL_BOX_INDEX_BITMAP_H_INCLUDED
+#ifndef BITMAP_EXPR_P_H_INCLUDED
+#define BITMAP_EXPR_P_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -31,22 +31,45 @@
  */
 
 /**
- * @brief Module implements adapter (ObjC object) for bitmap index in Tarantool
- * @see struct bitmap
- * @see struct bitmap_index
+ * @file
+ * @brief Private header file, please don't use directly.
  * @author Roman Tsisyk
  */
 
-#include "index.h"
+#include "expr.h"
 
-struct bitmap_index;
-struct bitmap_expr;
+struct bitmap_expr_group {
+	/** operation to combine (reduce) bitmaps during iterations **/
+	enum bitmap_binary_op reduce_op; /* only AND, OR, XOR supported */
+	/** operation to apply after combining */
+	enum bitmap_unary_op post_op; /* not supported yet */
 
-@interface BitmapIndex: Index {
-	@private
-	struct bitmap_index *index;
-	struct bitmap_expr *position_expr;
-}
-@end
+	/** number of elements in the group */
+	size_t elements_size;
+	/** number of allocated elements in the group */
+	size_t elements_capacity;
 
-#endif /* TARANTOOL_BOX_INDEX_BITMAP_H_INCLUDED */
+	/** elements */
+	struct bitmap_expr_group_element {
+		/** operation to apply to source bitmap before reducing */
+		enum bitmap_unary_op pre_op;
+		/** source bitmap */
+		struct bitmap *bitmap;
+	} elements[];
+};
+
+struct bitmap_expr {
+	/** groups */
+	struct bitmap_expr_group **groups;
+	/** number of active groups in the expr */
+	size_t groups_size;
+	/** number of alloacted groups in the expr */
+	size_t groups_capacity;
+
+	bool in_group;
+};
+
+extern const size_t EXPR_DEFAULT_CAPACITY;
+extern const size_t EXPR_GROUP_DEFAULT_CAPACITY;
+
+#endif /* BITMAP_EXPR_P_H_INCLUDED */

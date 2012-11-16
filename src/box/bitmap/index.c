@@ -164,161 +164,97 @@ int bitmap_index_remove(struct bitmap_index *index,
 	return 0;
 }
 
-static
-int bitmap_index_iterate_equals(struct bitmap_index *index,
-			       struct bitmap_iterator **pit,
-			       void *key, size_t key_size)
+int bitmap_index_iterate_equals(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size)
 {
-	int rc = 0;
+	assert (index != NULL);
+	assert (expr != NULL);
 
-	size_t key_bits = (key_size * CHAR_BIT);
-	size_t elements_size = 1;
+	bitmap_expr_clear(expr);
 
-	for (size_t pos = 0; pos < key_bits; pos++) {
-		size_t b = pos + 1;
-		if (test_bit(key, pos)) {
-			if (index->bitmaps[b] == NULL ||
-				index->bitmaps_size <= pos) {
-				elements_size = 0;
-				break;
-			}
-
-			elements_size++;
-		} else {
-			if (index->bitmaps[b] == NULL
-				|| index->bitmaps_size <= pos) {
-				continue;
-			}
-			elements_size++;
-		}
-	}
-
-	struct bitmap_iterator_group *set;
-	size_t set_size = sizeof(*set) + sizeof(*(set->elements)) *
-			elements_size;
-	set = calloc(1, set_size);
-	if (!set) {
+	if (bitmap_expr_add_group(expr, BITMAP_OP_AND, BITMAP_OP_NULL) != 0) {
 		return -1;
 	}
-
-	set->reduce_op = BITMAP_OP_AND;
-	set->post_op = BITMAP_OP_NULL;
-	set->elements_size = 0;
-
-	if (elements_size == 0) {
-		goto exit;
-	}
-
-	set->elements[set->elements_size].bitmap = index->bitmaps[0];
-	set->elements[set->elements_size].pre_op = BITMAP_OP_NULL;
-	set->elements_size++;
 
 	for (size_t pos = 0; pos < key_size * CHAR_BIT; pos++) {
 		size_t b = pos + 1;
 		if (test_bit(key, pos)) {
-			assert (index->bitmaps[b] != NULL);
+			if (index->bitmaps[b] == NULL) {
+				bitmap_expr_clear(expr);
+				break;
+			}
 
-			set->elements[set->elements_size].bitmap =
-					index->bitmaps[b];
-			set->elements[set->elements_size].pre_op =
-					BITMAP_OP_NULL;
-			set->elements_size++;
+			if (bitmap_expr_group_add_bitmap(expr, 0,
+				index->bitmaps[b], BITMAP_OP_NULL) != 0) {
+				return -1;
+			}
 		} else {
 			if (index->bitmaps[b] == NULL) {
 				continue;
 			}
 
-			set->elements[set->elements_size].bitmap =
-					index->bitmaps[b];
-			set->elements[set->elements_size].pre_op =
-					BITMAP_OP_NOT;
-			set->elements_size++;
+			if (bitmap_expr_group_add_bitmap(expr, 0,
+				index->bitmaps[b], BITMAP_OP_NOT) != 0) {
+				return -1;
+			}
 		}
 	}
 
-exit:
-	assert(set->elements_size == elements_size);
-
-	rc = bitmap_iterator_newgroup(pit, &set, 1);
-	free(set);
-
-	return rc;
+	return 0;
 }
 
-static
-int bitmap_index_iterate_contains(struct bitmap_index *index,
-				     struct bitmap_iterator **pit,
-				     void *key, size_t key_size)
+int bitmap_index_iterate_all_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size)
 {
-	size_t used_bitmaps_count = 1;
+	assert (index != NULL);
+	assert (expr != NULL);
+
+	bitmap_expr_clear(expr);
+
+	if (bitmap_expr_add_group(expr, BITMAP_OP_AND, BITMAP_OP_NULL) != 0) {
+		return -1;
+	}
+
+	if (bitmap_expr_group_add_bitmap(expr, 0,
+		index->bitmaps[0], BITMAP_OP_NULL) != 0) {
+		return -1;
+	}
 
 	size_t pos = 0;
 	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
 		if (index->bitmaps[b] == NULL || b >= index->bitmaps_size) {
-			/* do not have bitmap for this bit */
-			used_bitmaps_count = 0;
+			bitmap_expr_clear(expr);
 			break;
 		}
+		if (bitmap_expr_group_add_bitmap(expr, 0,
+			index->bitmaps[b], BITMAP_OP_NULL) != 0) {
+			return -1;
+		}
 
-		used_bitmaps_count++;
 		pos++;
 	}
 
-	struct bitmap_iterator_group *set;
-	size_t set_size = sizeof(*set) + sizeof(*(set->elements)) *
-			used_bitmaps_count;
-	set = calloc(1, set_size);
-	if (!set) {
-		return -1;
-	}
-
-	set->reduce_op = BITMAP_OP_AND;
-	set->post_op = BITMAP_OP_NULL;
-	set->elements_size = used_bitmaps_count;
-
-	size_t b = 0;
-	if (used_bitmaps_count > 0) {
-		set->elements[b].bitmap = index->bitmaps[0];
-		set->elements[b].pre_op = BITMAP_OP_NULL;
-		b++;
-
-		pos = 0;
-		while(find_next_set_bit(key, key_size, &pos) == 0) {
-			set->elements[b].bitmap = index->bitmaps[pos + 1];
-			set->elements[b].pre_op = BITMAP_OP_NULL;
-			b++;
-
-			pos++;
-		}
-	}
-
-	int rc = bitmap_iterator_newgroup(pit, &set, 1);
-
-	free(set);
-
-	return rc;
+	return 0;
 }
 
-static
-int bitmap_index_iterate_intersects(struct bitmap_index *index,
-				    struct bitmap_iterator **pit,
-				    void *key, size_t key_size)
+int bitmap_index_iterate_any_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size)
 {
-	int rc = 0;
+	assert (index != NULL);
+	assert (expr != NULL);
 
-	struct bitmap_iterator_group *set1;
-	size_t set_size1 = sizeof(*set1) + sizeof(*(set1->elements)) *
-			(index->bitmaps_size - 1);
-	set1 = calloc(1, set_size1);
-	if (!set1) {
-		rc = -1;
-		goto error_1;
+	bitmap_expr_clear(expr);
+
+	if (bitmap_expr_add_group(expr, BITMAP_OP_OR, BITMAP_OP_NULL) != 0) {
+		return -1;
 	}
-
-	set1->reduce_op = BITMAP_OP_OR;
-	set1->post_op = BITMAP_OP_NULL;
-	set1->elements_size = 0;
 
 	for (size_t pos = 0;
 	     find_next_set_bit(key, key_size, &pos) == 0;
@@ -328,54 +264,23 @@ int bitmap_index_iterate_intersects(struct bitmap_index *index,
 			/* do not have bitmap for this bit */
 			continue;
 		}
-		set1->elements[set1->elements_size].bitmap = index->bitmaps[b];
-		set1->elements[set1->elements_size].pre_op = BITMAP_OP_NULL;
-		set1->elements_size++;
+
+		if (bitmap_expr_group_add_bitmap(expr, 0,
+			index->bitmaps[b], BITMAP_OP_NULL) != 0) {
+			return -1;
+		}
 	}
 
-	struct bitmap_iterator_group *set2;
-	size_t set_size2 = sizeof(*set2) + sizeof(*(set2->elements));
-	set2 = calloc(1, set_size2);
-	if (!set2) {
-		rc = -1;
-		goto error_2;
+	if (bitmap_expr_add_group(expr, BITMAP_OP_AND, BITMAP_OP_NULL) != 0) {
+		return -1;
 	}
 
-	set2->reduce_op = BITMAP_OP_AND;
-	set2->post_op = BITMAP_OP_NULL;
-	set2->elements_size = 1;
-	set2->elements[0].bitmap = index->bitmaps[0];
-	set2->elements[0].pre_op = BITMAP_OP_NULL;
-
-	struct bitmap_iterator_group *groups[] = { set1, set2 };
-
-	rc = bitmap_iterator_newgroup(pit, groups, 2);
-
-	free(set2);
-error_2:
-	free(set1);
-error_1:
-	return rc;
-}
-
-int bitmap_index_iterate(struct bitmap_index *index,
-			struct bitmap_iterator **pit,
-			void *key, size_t key_size,
-			int match_type) {
-
-
-	switch((enum bitmap_index_match_type) match_type) {
-	case BITMAP_INDEX_MATCH_EQUALS:
-		return bitmap_index_iterate_equals(index, pit, key, key_size);
-	case BITMAP_INDEX_MATCH_CONTAINS:
-		return bitmap_index_iterate_contains(index, pit, key, key_size);
-	case BITMAP_INDEX_MATCH_INTERSECTS:
-		return bitmap_index_iterate_intersects(index, pit, key, key_size);
-	default:
-		/* not implemented */
-		errno = ENOTSUP;
-		return -2;
+	if (bitmap_expr_group_add_bitmap(expr, 1,
+		index->bitmaps[0], BITMAP_OP_NULL) != 0) {
+		return -1;
 	}
+
+	return 0;
 }
 
 bool bitmap_index_contains_value(struct bitmap_index *index, size_t value) {

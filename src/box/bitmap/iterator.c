@@ -29,203 +29,160 @@
 
 #include "iterator.h"
 
+
 #include "bitmap.h"
 #include "bitmap_p.h"
+#include "expr_p.h"
 
 /**
  * BitmapIterator definition
  */
-struct bitmap_iterator {
-	size_t groups_size;
-	struct bitmap_iterator_group **groups;
-	struct bitmap_iterator_state **states;
 
-	// bitmap_word_t cur_word;
-	size_t cur_pos;
-	int indexes[BITMAP_WORD_BIT + 1]; /* used for word_index */
-	int indexes_pos;
+/* like bitmap_expr */
+struct bitmap_itstate {
+	/** groups */
+	struct bitmap_itstate_group **groups;
+	/** number of active groups in the expr */
+	size_t groups_capacity;
 };
 
-/* like bitmap_iterator_group */
-struct bitmap_iterator_state {
-	int data; // reserved for future use
+struct bitmap_itstate_group {
+	/** number of allocated elements in the state */
+	size_t elements_capacity;
 	struct bitmap_iterator_state_element {
 		struct bitmap_page *page;
 		size_t offset;
 	} elements[];
 };
 
+struct bitmap_iterator {
+	struct bitmap_expr *expr;
+	struct bitmap_itstate state;
+
+	size_t cur_pos;
+	int indexes[BITMAP_WORD_BIT + 1]; /* used for word_index */
+	int indexes_pos;
+};
+
+static int
+itstate_reserve(struct bitmap_itstate *itstate, size_t capacity)
+{
+	if (itstate->groups_capacity >= capacity) {
+		return 0;
+	}
+
+	struct bitmap_itstate_group **groups =
+		realloc(itstate->groups, capacity * sizeof(*itstate->groups));
+
+	if (groups == NULL) {
+		return 0;
+	}
+
+	itstate->groups = groups;
+	for (size_t g = itstate->groups_capacity; g < capacity; g++) {
+		struct bitmap_itstate_group *group;
+		size_t size = sizeof(*group) +
+			sizeof(*(group->elements)) * EXPR_GROUP_DEFAULT_CAPACITY;
+		group = calloc(1, size);
+		if (group == NULL) {
+			return -1;
+		}
+
+		itstate->groups[g] = group;
+		itstate->groups_capacity++;
+	}
+
+	return 0;
+}
+
+static int
+itstate_reserve_group(struct bitmap_itstate *itstate,
+		      size_t group_id, size_t capacity)
+{
+	assert(itstate->groups_capacity > group_id);
+
+	struct bitmap_itstate_group *orig_group = itstate->groups[group_id];
+
+	if (orig_group->elements_capacity >= capacity) {
+		return 0;
+	}
+
+	size_t capacity2 = orig_group->elements_capacity;
+	while (capacity2 < capacity) {
+		capacity2 *= 2;
+	}
+
+	struct bitmap_itstate_group *new_group;
+	size_t size = sizeof(*new_group) +
+		sizeof(*new_group->elements) * capacity2;
+	new_group = calloc(1, size);
+	if (new_group == NULL) {
+		return -1;
+	}
+
+	memcpy(new_group->elements,
+	       orig_group->elements,
+	       sizeof(*orig_group->elements) * orig_group->elements_capacity);
+
+	new_group->elements_capacity = capacity2;
+	itstate->groups[group_id] = new_group;
+
+	free(orig_group);
+	return 0;
+}
+
+
 static
 int next_word(struct bitmap_iterator *it);
 static
-int next_word_in_group(struct bitmap_iterator_group *group,
-		     struct bitmap_iterator_state *states,
-		     size_t *cur_pos, bitmap_word_t *pword);
+int next_word_in_group(struct bitmap_expr_group *group,
+		       struct bitmap_itstate_group *state,
+		       size_t *cur_pos, bitmap_word_t *pword);
 static
 void next_word_in_bitmap(struct bitmap *bitmap,
 			 struct bitmap_page **ppage, size_t *poffset,
 			 int bitmap_ops, bitmap_word_t *word);
 
-int bitmap_iterator_new(struct bitmap_iterator **pit,
-			struct bitmap *bitmap,
-			enum bitmap_unary_op pre_op) {
-
-	size_t bitmaps_size = 1;
-	struct bitmap_iterator_group *group;
-	size_t size = sizeof(*group) + sizeof(*(group->elements)) *
-			bitmaps_size;
-	group = calloc(1, size);
-	if (!group) {
-		return -1;
-	}
-
-	group->reduce_op = BITMAP_OP_AND;
-	group->post_op = BITMAP_OP_NULL;
-	group->elements_size = bitmaps_size;
-	group->elements[0].bitmap = bitmap;
-	group->elements[0].pre_op = pre_op;
-
-	int rc = bitmap_iterator_newgroup(pit, &group, 1);
-
-	free(group);
-
-	return rc;
-}
-
-int bitmap_iterator_newn(struct bitmap_iterator **pit,
-			 struct bitmap **bitmaps, size_t bitmaps_size,
-			 int *bitmaps_ops,
-			 int result_ops) {
-
-	struct bitmap_iterator_group *group;
-	size_t size = sizeof(*group) + sizeof(*(group->elements)) *
-			bitmaps_size;
-	group = calloc(1, size);
-	if (!group) {
-		return -1;
-	}
-
-
-	group->reduce_op = BITMAP_OP_AND;
-	group->post_op = result_ops;
-	group->elements_size = bitmaps_size;
-
-	for(size_t b = 0; b < bitmaps_size; b++) {
-		group->elements[b].bitmap = bitmaps[b];
-		group->elements[b].pre_op = bitmaps_ops[b];
-	}
-
-	int rc = bitmap_iterator_newgroup(pit, &group, 1);
-
-	free(group);
-
-	return rc;
-
-}
-
-int bitmap_iterator_newgroup(struct bitmap_iterator **pit,
-			struct bitmap_iterator_group **groups,
-			size_t groups_size)
+int bitmap_iterator_new(struct bitmap_iterator **pit)
 {
-#ifndef NDEBUG
-	/* sanity checks */
-	assert(groups != NULL);
-	assert(groups_size > 0);
-	for (size_t s = 0; s < groups_size; s++) {
-		assert(groups[s] != NULL);
-		assert(groups[s]->reduce_op == BITMAP_OP_AND ||
-		       groups[s]->reduce_op == BITMAP_OP_OR  ||
-		       groups[s]->reduce_op == BITMAP_OP_XOR);
-
-		assert(groups[s]->post_op == BITMAP_OP_NULL);
-		/* TODO(roman): support for OP_NOT post_op */
-	}
-	for (size_t s = 0; s < groups_size; s++) {
-		for (size_t b = 0; b < groups[s]->elements_size; b++) {
-			assert(groups[s]->elements[b].bitmap != NULL);
-			assert(groups[s]->elements[b].pre_op == BITMAP_OP_NULL ||
-			       groups[s]->elements[b].pre_op == BITMAP_OP_NOT);
-		}
-	}
-#endif /* ndef NDEBUG */
-
 	int rc = -1;
 	struct bitmap_iterator *it = calloc(1, sizeof(struct bitmap_iterator));
 	if (it == NULL) {
 		goto error_0;
 	}
 
-	/* Allocate groups */
-	it->groups_size = groups_size;
-	it->groups = calloc(groups_size, sizeof(*(it->groups)));
-	if (it->groups == NULL) {
+	it->state.groups = calloc(EXPR_DEFAULT_CAPACITY,
+		sizeof(*it->state.groups));
+	if (it->state.groups == NULL) {
 		goto error_1;
 	}
 
-	for (size_t g = 0; g < groups_size; g++) {
-		struct bitmap_iterator_group *group;
+	it->state.groups_capacity = EXPR_DEFAULT_CAPACITY;
+
+	for (size_t g = 0; g < EXPR_DEFAULT_CAPACITY; g++) {
+		struct bitmap_itstate_group *group;
 		/* allocate memory for structure with flexible array */
 		size_t size = sizeof(*group) +
-			sizeof(*(group->elements)) * groups[g]->elements_size;
+			sizeof(*(group->elements)) * EXPR_GROUP_DEFAULT_CAPACITY;
 		group = malloc(size);
 		if (group == NULL) {
 			goto error_2;
 		}
 
-		memcpy(group, groups[g], size);
-		it->groups[g] = group;
+		group->elements_capacity = EXPR_GROUP_DEFAULT_CAPACITY;
+		it->state.groups[g] = group;
 	}
-
-
-	/* Allocate set states */
-	it->states = calloc(groups_size, sizeof(*it->states));
-	if (it->groups == NULL) {
-		goto error_2;
-	}
-
-	for (size_t g = 0; g < groups_size; g++) {
-		struct bitmap_iterator_state *state;
-		size_t size = sizeof(*state) +
-			sizeof(*(state->elements)) * groups[g]->elements_size;
-		state = malloc(size);
-		if (state == NULL) {
-			goto error_3;
-		}
-
-		for (size_t b = 0; b < groups[g]->elements_size; b++) {
-			struct bitmap *bitmap = groups[g]->elements[b].bitmap;
-			state->elements[b].offset = 0;
-			/* can be NULL, RB_MIN is an optimization */
-			state->elements[b].page =
-				RB_MIN(bitmap_pages_tree, &(bitmap->pages));
-		}
-
-		it->states[g] = state;
-	}
-
-	it->cur_pos = 0;
-	it->indexes[0] = 0;
-	it->indexes_pos = 0;
 
 	*pit = it;
-
 	return 0;
 
-/* error handling */
-error_3:
-	for (size_t s = 0; s < it->groups_size; s++) {
-		if (it->states[s] != NULL) {
-			free(it->states[s]);
-		}
-	}
-	free(it->states);
 error_2:
-	for (size_t s = 0; s < it->groups_size; s++) {
-		if (it->groups[s] != NULL) {
-			free(it->groups[s]);
+	for (size_t g = 0; g < it->state.groups_capacity; g++) {
+		if (it->state.groups[g] != NULL) {
+			free(it->state.groups[g]);
 		}
 	}
-	free(it->groups);
+	free(it->state.groups);
 error_1:
 	free(it);
 error_0:
@@ -233,33 +190,113 @@ error_0:
 	return rc;
 }
 
+#if !defined(NDEBUG)
+static inline
+void check_expr(struct bitmap_expr *expr)
+{
+	/* sanity checks */
+	for (size_t g = 0; g < expr->groups_size; g++) {
+		assert(expr->groups[g] != NULL);
+		assert(expr->groups[g]->reduce_op == BITMAP_OP_AND ||
+		       expr->groups[g]->reduce_op == BITMAP_OP_OR  ||
+		       expr->groups[g]->reduce_op == BITMAP_OP_XOR);
+
+		assert(expr->groups[g]->post_op == BITMAP_OP_NULL);
+		/* TODO(roman): support for OP_NOT post_op */
+	}
+	for (size_t g = 0; g < expr->groups_size; g++) {
+		struct bitmap_expr_group *group = expr->groups[g];
+		for (size_t b = 0; b < group->elements_size; b++) {
+			assert(group->elements[b].bitmap != NULL);
+			assert(group->elements[b].pre_op == BITMAP_OP_NULL ||
+			       group->elements[b].pre_op == BITMAP_OP_NOT);
+		}
+	}
+}
+#endif /* !defined(DEBUG) */
+
+int bitmap_iterator_set_expr(struct bitmap_iterator *it,
+			     struct bitmap_expr *expr)
+{
+	assert(it != NULL);
+	assert(expr != NULL);
+
+#if !defined(NDEBUG)
+	check_expr(expr);
+#endif /* !defined(NDEBUG) */
+
+	if (itstate_reserve(&it->state, expr->groups_size) != 0) {
+		return -1;
+	}
+
+	for (size_t g = 0; g < expr->groups_size; g++) {
+		if (itstate_reserve_group(
+			&it->state, g, expr->groups[g]->elements_size) != 0) {
+			return -1;
+		}
+	}
+
+	it->expr = expr;
+	bitmap_iterator_rewind(it);
+
+	return 0;
+}
+
+struct bitmap_expr *bitmap_iterator_get_expr(struct bitmap_iterator *it)
+{
+	assert(it != NULL);
+	return it->expr;
+}
+
 void bitmap_iterator_free(struct bitmap_iterator **pit)
 {
 	struct bitmap_iterator *it = *pit;
 
 	if (it != NULL) {
-		for (size_t s = 0; s < it->groups_size; s++) {
-			if (it->states[s] != NULL) {
-				free(it->states[s]);
-			}
+		for (size_t s = 0; s < it->state.groups_capacity; s++) {
+			assert(it->state.groups[s] != NULL);
+			free(it->state.groups[s]);
 		}
-		free(it->states);
-
-		for (size_t s = 0; s < it->groups_size; s++) {
-			if (it->groups[s] != NULL) {
-				free(it->groups[s]);
-			}
-		}
-		free(it->groups);
-
+		free(it->state.groups);
 		free(it);
 	}
 
 	*pit = NULL;
 }
 
+void
+bitmap_iterator_rewind(struct bitmap_iterator *it)
+{
+	assert(it != NULL);
+	assert(it->state.groups_capacity >= it->expr->groups_size);
+
+	if (it->expr->groups_size == 0) {
+		it->cur_pos = SIZE_MAX;
+		return;
+	}
+
+	for (size_t g = 0; g < it->expr->groups_size; g++) {
+		struct bitmap_expr_group *group = it->expr->groups[g];
+		struct bitmap_itstate_group *state = it->state.groups[g];
+
+		for (size_t b = 0; b < group->elements_size; b++) {
+			struct bitmap *bitmap = group->elements[b].bitmap;
+			state->elements[b].offset = 0;
+			/* can be NULL, RB_MIN is an optimization */
+			state->elements[b].page =
+				RB_MIN(bitmap_pages_tree, &(bitmap->pages));
+		}
+	}
+
+	it->cur_pos = 0;
+	it->indexes[0] = 0;
+	it->indexes_pos = 0;
+}
+
 size_t bitmap_iterator_next(struct bitmap_iterator *it)
 {
+	assert(it->expr != NULL);
+
 	if (it->cur_pos == SIZE_MAX) {
 		return SIZE_MAX;
 	}
@@ -292,10 +329,12 @@ static
 int next_word(struct bitmap_iterator *it) {
 	bitmap_word_t word;
 
-	if (it->groups_size == 1) {
+	if (it->expr->groups_size == 1) {
 		/* optimization for case when only one group exist */
-		int rc = next_word_in_group(it->groups[0], it->states[0],
-				&(it->cur_pos), &(word));
+		int rc = next_word_in_group(it->expr->groups[0],
+					    it->state.groups[0],
+					    &(it->cur_pos),
+					    &(word));
 		if (rc == 0) {
 			word_index(word, it->indexes, 0);
 			it->indexes_pos = 0;
@@ -312,11 +351,13 @@ int next_word(struct bitmap_iterator *it) {
 	word = word_set_ones();
 	while(true) {
 		size_t offset_max = it->cur_pos;
-		for (size_t s = 0; s < it->groups_size; s++) {
+		for (size_t s = 0; s < it->expr->groups_size; s++) {
 			bitmap_word_t tmp_word = word_set_zeros();
 
-			if (next_word_in_group(it->groups[s], it->states[s],
-					&(offset_max), &(tmp_word)) < 0) {
+			if (next_word_in_group(it->expr->groups[s],
+					       it->state.groups[s],
+					       &(offset_max),
+					       &(tmp_word)) < 0) {
 				it->cur_pos = SIZE_MAX;
 				word = word_set_zeros();
 				return -1;
@@ -345,17 +386,17 @@ int next_word(struct bitmap_iterator *it) {
 
 
 static
-int next_word_in_group_and(struct bitmap_iterator_group *group,
-			      struct bitmap_iterator_state *state,
+int next_word_in_group_and(struct bitmap_expr_group *group,
+			      struct bitmap_itstate_group *state,
 			      size_t *pcur_pos, bitmap_word_t *pword);
 static
-int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
-			      struct bitmap_iterator_state *state,
+int next_word_in_group_or_xor(struct bitmap_expr_group *group,
+			      struct bitmap_itstate_group *state,
 			      size_t *pcur_pos, bitmap_word_t *pword);
 
 static
-int next_word_in_group(struct bitmap_iterator_group *group,
-		     struct bitmap_iterator_state *state,
+int next_word_in_group(struct bitmap_expr_group *group,
+		     struct bitmap_itstate_group *state,
 		     size_t *pcur_pos, bitmap_word_t *pword)
 {
 	*pcur_pos = *pcur_pos - (*pcur_pos % BITMAP_WORD_BIT);
@@ -380,8 +421,8 @@ int next_word_in_group(struct bitmap_iterator_group *group,
 }
 
 static
-int next_word_in_group_and(struct bitmap_iterator_group *group,
-			      struct bitmap_iterator_state *state,
+int next_word_in_group_and(struct bitmap_expr_group *group,
+			      struct bitmap_itstate_group *state,
 			      size_t *pcur_pos, bitmap_word_t *pword) {
 	assert(group->reduce_op == BITMAP_OP_AND);
 
@@ -470,8 +511,8 @@ int next_word_in_group_and(struct bitmap_iterator_group *group,
 }
 
 static
-int next_word_in_group_or_xor(struct bitmap_iterator_group *group,
-			      struct bitmap_iterator_state *state,
+int next_word_in_group_or_xor(struct bitmap_expr_group *group,
+			      struct bitmap_itstate_group *state,
 			      size_t *pcur_pos, bitmap_word_t *pword) {
 	assert(group->reduce_op == BITMAP_OP_OR ||
 	       group->reduce_op == BITMAP_OP_XOR);

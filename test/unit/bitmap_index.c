@@ -21,14 +21,18 @@ void test_resize()
 	bitmap_index_insert(index, &key, sizeof(key), value);
 
 	struct bitmap_iterator *it;
+	struct bitmap_expr *expr = bitmap_expr_new();
+	fail_if(expr == NULL);
+	fail_unless(bitmap_iterator_new(&it) == 0);
 
-	bitmap_index_iterate(index, &it, &key, sizeof(key),
-			     BITMAP_INDEX_MATCH_CONTAINS);
-
+	fail_unless(bitmap_index_iterate_equals(index, expr,
+						&key, sizeof(key)) == 0);
+	fail_unless(bitmap_iterator_set_expr(it, expr) == 0);
 	fail_unless(bitmap_iterator_next(it) == value);
 	fail_unless(bitmap_iterator_next(it) == SIZE_MAX);
 
 	bitmap_iterator_free(&it);
+	bitmap_expr_free(expr);
 
 	bitmap_index_free(&index);
 
@@ -63,6 +67,12 @@ static
 void check_keys(struct bitmap_index *index,
 		size_t *keys, size_t *values, size_t size)
 {
+	struct bitmap_expr *expr = bitmap_expr_new();
+	fail_if(expr == NULL);
+
+	struct bitmap_iterator *it;
+	fail_unless(bitmap_iterator_new(&it) == 0);
+
 	printf("Checking keys... ");
 	for (size_t i = 0; i < size; i++) {
 		/* ignore removed keys */
@@ -70,10 +80,10 @@ void check_keys(struct bitmap_index *index,
 			continue;
 		}
 
-		struct bitmap_iterator *it;
-		bitmap_index_iterate(index, &it, &(keys[i]), sizeof(keys[i]),
-				     BITMAP_INDEX_MATCH_CONTAINS);
+		fail_unless (bitmap_index_iterate_all_set(index, expr,
+				&(keys[i]), sizeof(keys[i])) == 0);
 
+		fail_unless(bitmap_iterator_set_expr(it, expr) == 0);
 		size_t pos;
 
 		bool pair_found = false;
@@ -84,15 +94,15 @@ void check_keys(struct bitmap_index *index,
 			}
 		}
 		fail_unless(pair_found);
-
-		bitmap_iterator_free(&it);
 	}
 	printf("ok\n");
 
+	bitmap_iterator_free(&it);
+	bitmap_expr_free(expr);
 }
 
 static
-void test_contains()
+void test_all_set()
 {
 	header();
 
@@ -138,7 +148,7 @@ void test_contains()
 }
 
 static
-void test_intersects() {
+void test_any_set() {
 	header();
 
 	struct bitmap_index *index;
@@ -152,9 +162,13 @@ void test_intersects() {
 
 	size_t key1 = 66; /* 0b1000010 */
 
+	struct bitmap_expr *expr = bitmap_expr_new();
+	fail_if(expr == NULL);
+	bitmap_index_iterate_any_set(index, expr, &key1, sizeof(key1));
+
 	struct bitmap_iterator *it;
-	bitmap_index_iterate(index, &it, &key1, sizeof(key1),
-			     BITMAP_INDEX_MATCH_INTERSECTS);
+	fail_unless(bitmap_iterator_new(&it) == 0);
+	fail_unless(bitmap_iterator_set_expr(it, expr) == 0);
 	for (size_t key = 0; key < NUM_SIZE; key++) {
 		if ((key & key1) == 0) {
 			continue;
@@ -163,6 +177,9 @@ void test_intersects() {
 		fail_unless(bitmap_iterator_next(it) == key);
 	}
 	fail_unless(bitmap_iterator_next(it) == SIZE_MAX);
+
+	bitmap_iterator_free(&it);
+	bitmap_expr_free(expr);
 
 	bitmap_index_free(&index);
 	footer();
@@ -187,9 +204,13 @@ void test_equals() {
 	printf("Insert done\n");
 
 	size_t key1 = (rand() % NUM_SIZE) & mask;
+	struct bitmap_expr *expr = bitmap_expr_new();
+	fail_if(expr == NULL);
 	struct bitmap_iterator *it;
-	fail_if(bitmap_index_iterate(index, &it, &key1, sizeof(key1),
-			     BITMAP_INDEX_MATCH_EQUALS) < 0);
+	fail_unless(bitmap_iterator_new(&it) == 0);
+	fail_unless(bitmap_index_iterate_equals(index, expr,
+			&key1, sizeof(key1)) == 0);
+	fail_unless(bitmap_iterator_set_expr(it, expr) == 0);
 
 	for (size_t i = key1; i <= (key1 + ~mask); i++) {
 		fail_unless(i == bitmap_iterator_next(it));
@@ -210,7 +231,7 @@ int main(int argc, char *argv[])
 	test_resize();
 	test_size();
 
-	test_contains();
-	test_intersects();
+	test_all_set();
+	test_any_set();
 	test_equals();
 }

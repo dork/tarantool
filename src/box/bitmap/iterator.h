@@ -31,13 +31,19 @@
  */
 
 /**
- * @brief Iterator for bitmap object.
+ * @file
+ * @brief Iterator for bitmap objects.
+ *
+ * The iterator can apply logical operations on bitmaps on the fly, without
+ * producing temporary bitmaps.
+ * @see expr.h
  * @author Roman Tsisyk
  */
 
 #include <util.h>
 
 #include "bitmap.h"
+#include "expr.h"
 
 /**
  * BitmapIterator object
@@ -45,91 +51,63 @@
  */
 struct bitmap_iterator;
 
-struct bitmap_iterator_group {
-	/** operation to combine (reduce) bitmaps during iterations **/
-	enum bitmap_binary_op reduce_op; /* only AND, OR, XOR supported */
-	/** operation to apply after combining */
-	enum bitmap_unary_op post_op; /* not supported yet */
-	/** number of elements on this group */
-	size_t elements_size;
-	/** elements */
-	struct bitmap_iterator_group_element {
-		/** operation to apply to source bitmap before reducing */
-		enum bitmap_unary_op pre_op;
-		/** source bitmap */
-		struct bitmap *bitmap;
-	} elements[];
-};
-
 /**
- * @brief Simplified version of bitmap_iterator_newgroup for one bitmap
- * @param pit object
- * @param bitmap source bitmap
- * @param pre_op operation applied to bitmap during iteration
- * @return 0 on success and < 0 on error
- * @see bitmap_iterator_newgroup
- */
-int bitmap_iterator_new(struct bitmap_iterator **pit,
-			struct bitmap *bitmap,
-			enum bitmap_unary_op pre_op);
-
-/**
- * @deprecated Replaced with bitmap_iterator_newgroup
- * @brief Simplified version of bitmap_iterator_newgroup
- * @param pit object
- * @param bitmaps list of bitmaps
- * @param bitmaps_size size of bitmaps parameters
- * @param bitmaps_ops operations that applied to each bitmap before ANDing
- * @param result_ops operations that applied to result bitmap
- * @return 0 on success and < 0 on error
- * @see bitmap_iterator_newgroup
- */
-__attribute__ ((deprecated))
-int bitmap_iterator_newn(struct bitmap_iterator **pit,
-			 struct bitmap **bitmaps, size_t bitmaps_size,
-			 int *bitmaps_ops,
-			 int result_ops);
-
-/**
- * @brief Creates new iterator for a list of bitmap groups.
- * Iterator can apply logical operations on bitmaps on the fly, without
- * producing temporary bitmaps. At first stage, element.pre_op is applied to
- * each bitmap of the group. Then reduce_op is cumulatively applied to the items
- * from left to right (like foldl), so as to reduce the group to a single value.
- * Example: group1 = b1 || ~b2 || b3 || ~b4. After that group.post_op is applied
- * on the result after that. On next step, iterator combines results from all
- * groups using binary AND operation.
- * Example: (group1) & ~(group2) & ~(group3)
- * Due to fact that every propositional formula can be represented using CNF,
- * you can construct any logical expression you want using scheme above.
- * @link http://en.wikipedia.org/wiki/Conjunctive_normal_form
- *
- * Please note that reduce operations on both cases are left-associate.
- *
- * TODO(roman): group.post_op other than OP_NULL is not implemented yet
- *
+ * @brief Allocates new iterator
+ * After creation the iterator must be initialed using
+ * @a bitmap_iterator_set_expr method.
  * @param pit pointer to object
- * @param groups list of groups
- * @param groups_size size of list groups
- * @return 0 on success and < 0 on error
- * @see bitmap_iterator_group
+ * @return zero on success and non-zero otherwise
  */
-int bitmap_iterator_newgroup(struct bitmap_iterator **pit,
-			struct bitmap_iterator_group **groups,
-			size_t groups_size);
+int bitmap_iterator_new(struct bitmap_iterator **pit);
 
 /**
- * @brief Destroys iterator
+ * @brief Destroys thee iterator
  * @param pit pointer to object
+ * @see bitmap_iterator_new
  */
 void bitmap_iterator_free(struct bitmap_iterator **pit);
 
 /**
- * @brief Iterates over the resulting bitmap
- * @see bitmap_iterator_newn
+ * @brief Initializer interator from the @a expr.
+ *
+ * @a expr object is not copied and must exist during the iterator lifetime.
+ * You can use same @a expr in multiple iterators. You can modify and reuse
+ * existing @a expr if no active iterators uses it.
+ * @todo group.post_op != OP_NULL is not implemented yet
+ * @todo group.reduce_op != OP_AND, OP_OR, OP_XOR is not implmented yet
+ *
+ * @param it object
+ * @param expr expression
+ * @return zero on success and non-zero otherwise
+ * @see expr.h
+ */
+int bitmap_iterator_set_expr(struct bitmap_iterator *it,
+			     struct bitmap_expr *expr);
+
+/**
+ * @brief Returns a pointer to current iterator expression
+ * @param it object
+ * @return A pointer to current iterator expression
+ * @note Expression must not be changed if the iterator is active.
+ * @see bitmap_iterator_set_expr
+ */
+struct bitmap_expr *
+bitmap_iterator_get_expr(struct bitmap_iterator *it);
+
+/**
+ * @brief Rewinds the iterator to the start position.
+ * @param it object
+ * @see bitmap_iterator_set_expr
+ */
+void bitmap_iterator_rewind(struct bitmap_iterator *it);
+
+/**
+ * @brief Moves iterator to next position.
+ * @see bitmap_iterator_set_expr
  * @param it object
  * @return offset where next bit is set or SIZE_MAX if no more bits
  */
 size_t bitmap_iterator_next(struct bitmap_iterator *it);
+
 
 #endif /* BITMAP_ITERATOR_H_INCLUDED */

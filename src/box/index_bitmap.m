@@ -83,6 +83,7 @@ void make_bitmap_key(void *key, void **bitmap_key, size_t *bitmap_key_size) {
 struct iterator_wrapper {
 	struct iterator base; /* Must be the first member. */
 	struct bitmap_iterator *bitmap_it;
+	struct bitmap_expr *bitmap_expr;
 };
 
 static struct iterator_wrapper *
@@ -99,15 +100,9 @@ iterator_wrapper_next(struct iterator *iterator)
 	size_t value = bitmap_iterator_next(it->bitmap_it);
 
 	if (value == SIZE_MAX) {
-#ifdef DEBUG
-	say_debug("BitmapIndex: iter not found\n");
-#endif
 		return NULL;
 	} else {
 		struct tuple *tuple = value_to_tuple(value);
-#ifdef DEBUG
-	say_debug("BitmapIndex: iter found value = %zu (%p)\n", value, tuple);
-#endif
 		return tuple;
 	}
 }
@@ -119,6 +114,7 @@ iterator_wrapper_free(struct iterator *iterator)
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
 
 	bitmap_iterator_free(&(it->bitmap_it));
+	bitmap_expr_free(it->bitmap_expr);
 	free(it);
 }
 
@@ -133,6 +129,12 @@ iterator_wrapper_free(struct iterator *iterator)
 - (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg
 {
 	say_info("BitmapIndex: init");
+
+	position_expr = bitmap_expr_new();
+	if (position_expr == NULL) {
+		tnt_raise(SystemError, :"bitmap_expr_new: %s",
+			strerror(errno));
+	}
 
 	self = [super init: key_def_arg :space_arg];
 	if (self) {
@@ -151,6 +153,7 @@ iterator_wrapper_free(struct iterator *iterator)
 		}
 
 		if (bitmap_index_new(&index, size) < 0) {
+			bitmap_expr_free(position_expr);
 			tnt_raise(SystemError, :"bitmap_index_new: %s",
 				strerror(errno));
 		}
@@ -160,6 +163,7 @@ iterator_wrapper_free(struct iterator *iterator)
 
 - (void) free
 {
+	bitmap_expr_free(position_expr);
 	bitmap_index_free(&index);
 	[super free];
 }
@@ -238,6 +242,19 @@ iterator_wrapper_free(struct iterator *iterator)
 		it->base.next = iterator_wrapper_next;
 		it->base.next_equal = iterator_wrapper_next;
 		it->base.free = iterator_wrapper_free;
+
+		it->bitmap_expr = bitmap_expr_new();
+		if (it->bitmap_expr == NULL) {
+			tnt_raise(SystemError, :"bitmap_expr_new: %s",
+				strerror(errno));
+		}
+
+		if (bitmap_iterator_new(&it->bitmap_it) != 0) {
+			bitmap_expr_free(it->bitmap_expr);
+			tnt_raise(SystemError, :"bitmap_iterator_new: %s",
+				strerror(errno));
+		}
+
 	}
 	return (struct iterator *) it;
 }
@@ -250,26 +267,27 @@ iterator_wrapper_free(struct iterator *iterator)
 	size_t bitmap_key_size = 0;
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
 
-	struct bitmap_iterator *it;
-	if (bitmap_index_iterate(index, &it, bitmap_key, bitmap_key_size,
-				 BITMAP_INDEX_MATCH_EQUALS) < 0) {
+	assert(position->free == iterator_wrapper_free);
+	struct iterator_wrapper *it = iterator_wrapper(position);
+
+	if (bitmap_index_iterate_equals(
+				index, it->bitmap_expr,
+				bitmap_key, bitmap_key_size) != 0) {
 		tnt_raise(SystemError, :"bitmap_index_iterate: %s",
 			strerror(errno));
 	}
 
-	size_t value = bitmap_iterator_next(it);
-	bitmap_iterator_free(&it);
+	if (bitmap_iterator_set_expr(it->bitmap_it, it->bitmap_expr) != 0) {
+		tnt_raise(SystemError, :"bitmap_iterator_init: %s",
+			strerror(errno));
+	}
+
+	size_t value = bitmap_iterator_next(it->bitmap_it);
 
 	if (value == SIZE_MAX) {
-#ifdef DEBUG
-	say_debug("BitmapIndex: not found\n");
-#endif
 		return NULL;
 	} else {
 		struct tuple *tuple = value_to_tuple(value);
-#ifdef DEBUG
-	say_debug("BitmapIndex: found value = %zu (%p)\n", value, tuple);
-#endif
 		return tuple;
 	}
 }
@@ -338,33 +356,32 @@ iterator_wrapper_free(struct iterator *iterator)
 {
 	(void) part_count;
 
-	enum bitmap_index_match_type match_type;
-	switch (type) {
-	case ITER_FORWARD:
-		match_type = BITMAP_INDEX_MATCH_EQUALS; break;
-	case ITER_BITSET_CONTAINS:
-		match_type = BITMAP_INDEX_MATCH_CONTAINS; break;
-	case ITER_BITSET_INTERSECTS:
-		match_type = BITMAP_INDEX_MATCH_INTERSECTS; break;
-	default:
-		tnt_raise(ClientError, :ER_UNSUPPORTED, "BitmapIndex",
-			  "iterator type");
-	}
-
 	assert(iterator->next == iterator_wrapper_next);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
-	if (it->bitmap_it != NULL) {
-		bitmap_iterator_free(&(it->bitmap_it));
-	}
 
 	void *bitmap_key = NULL;
 	size_t bitmap_key_size = 0;
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
 
-	if (bitmap_index_iterate(index, &(it->bitmap_it),
-				 bitmap_key, bitmap_key_size,
-				 match_type) < 0) {
+	int rc = 0;
+	switch (type) {
+	case ITER_FORWARD:
+		rc = bitmap_index_iterate_equals(
+					index, it->bitmap_expr,
+					bitmap_key, bitmap_key_size);
+		break;
+	default:
+		tnt_raise(ClientError, :ER_UNSUPPORTED, "BitmapIndex",
+			  "iterator type");
+	}
+
+	if (rc != 0) {
 		tnt_raise(SystemError, :"bitmap_index_iterate: %s",
+			strerror(errno));
+	}
+
+	if (bitmap_iterator_set_expr(it->bitmap_it, it->bitmap_expr) != 0) {
+		tnt_raise(SystemError, :"bitmap_iterator_init: %s",
 			strerror(errno));
 	}
 }

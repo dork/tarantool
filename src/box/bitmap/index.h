@@ -31,8 +31,9 @@
  */
 
 /**
- * @brief Module implements bitmap index using bitmap objects
- * @see struct bitmap
+ * @file
+ * @brief Bit index.
+ * @see bitmap.h
  * @author Roman Tsisyk
  */
 
@@ -43,69 +44,102 @@
 
 struct bitmap_index;
 
+/**
+ * @brief Creates new index object
+ * @param pindex
+ * @param initial_size initial number of used bitmaps
+ * @return zero on success and non-zero otherwise
+ */
 int bitmap_index_new(struct bitmap_index **pindex, size_t initial_size);
+
+/**
+ * @brief Destroys index object
+ * @param pindex
+ */
 void bitmap_index_free(struct bitmap_index **pindex);
 
 /**
- * @brief Inserts entry to the index
+ * @brief Inserts (key, value) pair into the index.
  * @param index object
- * @param key entry's key
- * @param key_size
- * @param value entry's value
+ * @param key key
+ * @param key_size size of key
+ * @param value value
+ * @return zero on success and non-zero otherwise
  */
 int bitmap_index_insert(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value);
 
-
 /**
- * @brief Removes entry from the index
+ * @brief Removes (key, value) pair from the index.
  * @param index object
- * @param key entry's
- * @param key_size
- * @param value entry's value
+ * @param key key
+ * @param key_size size of key
+ * @param value value
+ * @return zero on success and non-zero otherwise
  */
 int bitmap_index_remove(struct bitmap_index *index,
 			void *key, size_t key_size,
 			size_t value);
 
-
-enum bitmap_index_match_type {
-	/* tuple_set IS SUPERSET of request_set,
-	 * i.e. tuple_set contains all bits from request_set */
-	BITMAP_INDEX_MATCH_CONTAINS = 0,
-
-	/* tuple_set INTERSECTS with request_set */
-	BITMAP_INDEX_MATCH_INTERSECTS = 1,
-
-	/* tuple_set EQUALS request_set */
-	BITMAP_INDEX_MATCH_EQUALS = 2
-};
-
 /**
- * @brief Creates new iterator to iterate over index values
- * Please free pit after using by calling bitmap_iterator_free method.
+ * @brief Equals iteration. Matches all pairs in the index, where
+ * @a key exacttly equals pair.key ((@a key == pair.key).
+ * Initialized @a expr can be used with @a bitmap_iterator_init function.
  * @param index
- * @param pit new bitmap_iterator
- * @param key
- * @param key_size
- * @see struct bitmap_iterator
+ * @param expr expression
+ * @param key key
+ * @param key_size size of key
+ * @return zero on success and non-zero otherwise
+ * @see expr.h
  */
-int bitmap_index_iterate(struct bitmap_index *index,
-			 struct bitmap_iterator **pit,
-			 void *key, size_t key_size,
-			 int match_type);
+int bitmap_index_iterate_equals(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size);
 
 /**
- * @brief Checks if value present in the index
+ * @brief All-Bits-Set iteration. Matches all pairs in the index, where
+ * all bits from @a key is set in pair.key ((@a key & pair.key) == @a key).
+ * Initialized @a expr can be used with @a bitmap_iterator_init function.
  * @param index
+ * @param expr expression
+ * @param key key
+ * @param key_size size of key
+ * @return zero on success and non-zero otherwise
+ * @see expr.h
+ */
+int bitmap_index_iterate_all_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size);
+
+/**
+ * @brief Any-Bits-Set iteration. Matches all pairs in the index, where
+ * at least on bit from @a key is set in pair.key ((@a key & pair.key) != 0).
+ * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * @param index object
+ * @param expr expression
+ * @param key key
+ * @param key_size size of key
+ * @return zero on success and non-zero otherwise
+ * @see expr.h
+ */
+int bitmap_index_iterate_any_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size);
+
+/**
+ * @brief Checks if a pairs with @a value exists in the index
+ * @param index object
  * @param value
- * @return true if the index contains entry with this value
+ * @return true if the index contains pair with the @a value
  */
 bool bitmap_index_contains_value(struct bitmap_index *index, size_t value);
 
 /**
- * @brief Returns number of entries in this index.
+ * @brief Returns number of pairs in the index.
  * @param index object
  * @return number of pairs in this index
  */

@@ -31,18 +31,18 @@
  */
 
 /**
+ * @file
  * @brief Module to work with arrays of bits (bitmaps)
+ *
+ * Bitmap is an array of bits where each bit can be set or unset independently.
+ * It supports special compression scheme in order to save memory.
+ * You can use any values in range [0,SIZE_MAX) without worrying about resizing.
+ *
  * @author Roman Tsisyk
  */
 
 #include <util.h>
 
-/**
- * Bitmap object
- * Bitmap is an array of bits where each bit can be set or unset independently.
- * It supports special compression scheme in order to save memory.
- * You can use any values in range [0,SIZE_MAX) without worrying about resizing.
- */
 struct bitmap;
 
 /**
@@ -80,25 +80,6 @@ int bitmap_set(struct bitmap *bitmap, size_t pos, bool val);
  * @return returns the number of bits set to true in this bitmap.
  */
 size_t bitmap_cardinality(struct bitmap *bitmap);
-
-/**
- * @brief BitmapOp is used as parameter to bitmap_iterator_newn function.
- * @see bitmap_iterator_newn
- */
-enum bitmap_unary_op {
-	BITMAP_OP_NULL = 0,
-	/* inverse (apply bitwise NOT) bits in the bitmap  */
-	BITMAP_OP_NOT   = 0x1
-};
-
-enum bitmap_binary_op {
-	BITMAP_OP_AND   = 0x1 << 8,
-	BITMAP_OP_NAND  = 0x2 << 8,
-	BITMAP_OP_OR    = 0x3 << 8,
-	BITMAP_OP_NOR   = 0x4 << 8,
-	BITMAP_OP_XOR   = 0x5 << 8,
-	BITMAP_OP_XNOR  = 0x6 << 8
-};
 
 
 #if defined(DEBUG)
