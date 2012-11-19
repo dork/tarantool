@@ -182,7 +182,7 @@ int bitmap_index_iterate_equals(
 		size_t b = pos + 1;
 		if (test_bit(key, pos)) {
 			if (index->bitmaps[b] == NULL) {
-				bitmap_expr_clear(expr);
+				bitmap_expr_group_clear(expr, 0);
 				break;
 			}
 
@@ -200,6 +200,11 @@ int bitmap_index_iterate_equals(
 				return -1;
 			}
 		}
+	}
+
+	if (bitmap_expr_group_add_bitmap(expr, 0,
+		index->bitmaps[0], BITMAP_OP_NULL) != 0) {
+		return -1;
 	}
 
 	return 0;

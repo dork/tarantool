@@ -147,6 +147,15 @@ bitmap_expr_group_add_bitmap(struct bitmap_expr *expr,
 			     enum bitmap_unary_op pre_op);
 
 /**
+ * @brief Clear group with identifier = @a group_id
+ * @param expr object
+ * @param group_id  group identifier
+ */
+void
+bitmap_expr_group_clear(struct bitmap_expr *expr,
+			size_t group_id);
+
+/**
  * @brief Returns number of bitmaps in the @a group
  * @param expr object
  * @param group_id group identifier

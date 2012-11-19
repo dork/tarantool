@@ -223,6 +223,15 @@ bitmap_expr_group_add_bitmap(struct bitmap_expr *expr,
 	return 0;
 }
 
+void
+bitmap_expr_group_clear(struct bitmap_expr *expr,
+			size_t group_id)
+{
+	assert(expr != NULL);
+	assert(expr->groups_size > group_id);
+	expr->groups[group_id]->elements_size = 0;
+}
+
 size_t
 bitmap_expr_group_size(struct bitmap_expr *expr,
 		       size_t group_id)
