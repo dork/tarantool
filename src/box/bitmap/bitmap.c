@@ -195,7 +195,7 @@ void word_str_r(bitmap_word_t word, char *str, size_t len)
 	str[BITMAP_WORD_BIT] = '\0';
 
 	int indexes[BITMAP_WORD_BIT + 1];
-	word_index(page->words[w], indexes, 0);
+	word_index(word, indexes, 0);
 	for (size_t i = 0; i < BITMAP_WORD_BIT && indexes[i] != 0; i++) {
 		str[indexes[i] - 1] = '1';
 	}

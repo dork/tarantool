@@ -103,6 +103,10 @@ iterator_wrapper_next(struct iterator *iterator)
 		return NULL;
 	} else {
 		struct tuple *tuple = value_to_tuple(value);
+#ifdef DEBUG
+		say_debug("BitmapIndex: iterator_next = %zu (%p)",
+			  value, tuple);
+#endif /* DEBUG */
 		return tuple;
 	}
 }
@@ -288,6 +292,10 @@ iterator_wrapper_free(struct iterator *iterator)
 		return NULL;
 	} else {
 		struct tuple *tuple = value_to_tuple(value);
+#ifdef DEBUG
+		say_debug("BitmapIndex: findUnsafe value = %zu (%p)",
+			  value, tuple);
+#endif
 		return tuple;
 	}
 }
@@ -362,6 +370,10 @@ iterator_wrapper_free(struct iterator *iterator)
 	void *bitmap_key = NULL;
 	size_t bitmap_key_size = 0;
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
+
+#ifdef DEBUG
+	say_debug("BitmapIndex: initIteratorUnsafe");
+#endif /* DEBUG */
 
 	int rc = 0;
 	switch (type) {
