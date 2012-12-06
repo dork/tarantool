@@ -66,12 +66,12 @@ read_space(struct tbuf *data)
 }
 
 static void
-execute_replace(struct request *request, struct txn *txn, struct port *port)
+execute_replace(struct request *request, struct txn *txn)
 {
 	struct tbuf *data = request->data;
 	txn_add_redo(txn, request->type, data);
 	struct space *sp = read_space(data);
-	u32 flags = read_u32(data) & BOX_ALLOWED_REQUEST_FLAGS;
+	request->flags |= read_u32(data) & BOX_ALLOWED_REQUEST_FLAGS;
 	size_t field_count = read_u32(data);
 
 	if (field_count == 0)
@@ -87,19 +87,24 @@ execute_replace(struct request *request, struct txn *txn, struct port *port)
 
 	/* Try to find tuple by primary key */
 	Index *pk = space_index(sp, 0);
+
+	/* Check to see if the tuple has a sufficient number of fields. */
+	if (unlikely(txn->new_tuple->field_count < sp->max_fieldno)) {
+		tnt_raise(IllegalParams, :"tuple must have all indexed fields");
+	}
+
+	/* lookup old_tuple only when we have enough fields in new_tuple */
 	struct tuple *old_tuple = [pk findByTuple: txn->new_tuple];
 
-	if (flags & BOX_ADD && old_tuple != NULL)
+	if (request->flags & BOX_ADD && old_tuple != NULL)
 		tnt_raise(ClientError, :ER_TUPLE_FOUND);
 
-	if (flags & BOX_REPLACE && old_tuple == NULL)
+	if (request->flags & BOX_REPLACE && old_tuple == NULL)
 		tnt_raise(ClientError, :ER_TUPLE_NOT_FOUND);
 
 	space_validate(sp, old_tuple, txn->new_tuple);
 
 	txn_add_undo(txn, sp, old_tuple, txn->new_tuple);
-
-	port_add_tuple(port, txn->new_tuple, flags);
 }
 
 /** {{{ UPDATE request implementation.
@@ -684,12 +689,12 @@ update_read_ops(struct tbuf *data, u32 op_cnt)
 }
 
 static void
-execute_update(struct request *request, struct txn *txn, struct port *port)
+execute_update(struct request *request, struct txn *txn)
 {
 	struct tbuf *data = request->data;
 	txn_add_redo(txn, request->type, data);
 	struct space *sp = read_space(data);
-	u32 flags = read_u32(data) & BOX_ALLOWED_REQUEST_FLAGS;
+	request->flags |= read_u32(data) & BOX_ALLOWED_REQUEST_FLAGS;
 
 	/* Parse UPDATE request. */
 	/** Search key */
@@ -717,17 +722,14 @@ execute_update(struct request *request, struct txn *txn, struct port *port)
 		space_validate(sp, old_tuple, txn->new_tuple);
 	}
 	txn_add_undo(txn, sp, old_tuple, txn->new_tuple);
-	if (txn->new_tuple)
-		port_add_tuple(port, txn->new_tuple, flags);
 }
 
 /** }}} */
 
 static void
-execute_select(struct request *request, struct txn *txn, struct port *port)
+execute_select(struct request *request, struct port *port)
 {
 	struct tbuf *data = request->data;
-	(void) txn; /* Not used. */
 	struct space *sp = read_space(data);
 	u32 index_no = read_u32(data);
 	Index *index = index_find(sp, index_no);
@@ -753,10 +755,10 @@ execute_select(struct request *request, struct txn *txn, struct port *port)
 		read_key(data, &key, &key_part_count);
 
 		struct iterator *it = index->position;
-		[index initIteratorByKey: it :ITER_FORWARD :key :key_part_count];
+		[index initIterator: it :ITER_EQ :key :key_part_count];
 
 		struct tuple *tuple;
-		while ((tuple = it->next_equal(it)) != NULL) {
+		while ((tuple = it->next(it)) != NULL) {
 			if (tuple->flags & GHOST)
 				continue;
 
@@ -776,15 +778,14 @@ execute_select(struct request *request, struct txn *txn, struct port *port)
 }
 
 static void
-execute_delete(struct request *request, struct txn *txn, struct port *port)
+execute_delete(struct request *request, struct txn *txn)
 {
 	struct tbuf *data = request->data;
 	u32 type = request->type;
 	txn_add_redo(txn, type, data);
-	u32 flags = 0;
 	struct space *sp = read_space(data);
 	if (type == DELETE)
-		flags |= read_u32(data) & BOX_ALLOWED_REQUEST_FLAGS;
+		request->flags |= read_u32(data) & BOX_ALLOWED_REQUEST_FLAGS;
 	/* read key */
 	u32 key_part_count;
 	void *key;
@@ -794,9 +795,6 @@ execute_delete(struct request *request, struct txn *txn, struct port *port)
 	struct tuple *old_tuple = [pk findByKey :key :key_part_count];
 
 	txn_add_undo(txn, sp, old_tuple, NULL);
-
-	if (old_tuple)
-		port_add_tuple(port, old_tuple, flags);
 }
 
 /** To collects stats, we need a valid request type.
@@ -831,6 +829,7 @@ request_create(u32 type, struct tbuf *data)
 	struct request *request = palloc(fiber->gc_pool, sizeof(struct request));
 	request->type = type;
 	request->data = data;
+	request->flags = 0;
 	return request;
 }
 
@@ -839,25 +838,24 @@ request_execute(struct request *request, struct txn *txn, struct port *port)
 {
 	switch (request->type) {
 	case REPLACE:
-		execute_replace(request, txn, port);
+		execute_replace(request, txn);
 		break;
 	case SELECT:
-		execute_select(request, txn, port);
+		execute_select(request, port);
 		break;
 	case UPDATE:
-		execute_update(request, txn, port);
+		execute_update(request, txn);
 		break;
 	case DELETE_1_3:
 	case DELETE:
-		execute_delete(request, txn, port);
+		execute_delete(request, txn);
 		break;
 	case CALL:
-		box_lua_execute(request, txn, port);
+		box_lua_execute(request, port);
 		break;
 	default:
 		assert(false);
 		request_check_type(request->type);
 		break;
 	}
-	port_eof(port);
 }

@@ -47,9 +47,48 @@ extern const char *field_data_type_strs[];
 enum index_type { HASH, TREE, BITMAP, index_type_MAX };
 extern const char *index_type_strs[];
 
-enum iterator_type { ITER_FORWARD, ITER_REVERSE, /* exact match */
-		     ITER_BITSET_CONTAINS, ITER_BITSET_INTERSECTS
-		   };
+/**
+ * @abstract Iterator type
+ * Controls how to iterate over tuples in an index.
+ * Different index types support different iterator types.
+ * For example, one can start iteration from a particular value
+ * (request key) and then retrieve all tuples where keys are
+ * greater or equal (= GE) to this key.
+ *
+ * If iterator type is not supported by the selected index type,
+ * iterator constructor must fail with ER_UNSUPPORTED. To be
+ * selectable for primary key, an index must support at least
+ * ITER_EQ and ITER_GE types.
+ *
+ * NULL value of request key corresponds to the first or last
+ * key in the index, depending on iteration direction.
+ * (first key for GE and GT types, and last key for LE and LT).
+ * Therefore, to iterate over all tuples in an index, one can
+ * use ITER_GE or ITER_LE iteration types with start key equal
+ * to NULL.
+ * For ITER_EQ, the key must not be NULL.
+ */
+#define ITERATOR_TYPE(_)                                             \
+	_(ITER_ALL, 0)       /* all tuples                      */   \
+	_(ITER_EQ,  1)       /* key == x ASC order              */   \
+	_(ITER_REQ, 2)       /* key == x DESC order             */   \
+	_(ITER_LT,  3)       /* key <  x                        */   \
+	_(ITER_LE,  4)       /* key <= x                        */   \
+	_(ITER_GE,  5)       /* key >= x                        */   \
+	_(ITER_GT,  6)       /* key >  x                        */   \
+	_(ITER_BITS_ALL_SET,     7) /* all bits from x are set in key      */ \
+	_(ITER_BITS_ANY_SET,     8) /* at least one x's bit is set         */ \
+	_(ITER_BITS_ALL_NOTSET,  9) /* all bits are not set                */ \
+	_(ITER_BITS_ANY_NOTSET, 10) /* at least one x's bit is not set     */
+
+ENUM(iterator_type, ITERATOR_TYPE);
+extern const char *iterator_type_strs[];
+
+static inline bool
+iterator_type_is_reverse(enum iterator_type type)
+{
+	return type == ITER_REQ || type == ITER_LT || type == ITER_LE;
+}
 
 /** Descriptor of a single part in a multipart key. */
 struct key_part {
@@ -79,6 +118,7 @@ struct key_def {
 	 */
 	int max_fieldno;
 	bool is_unique;
+	enum index_type type;
 };
 
 /** Descriptor of index features. */
@@ -145,28 +185,25 @@ struct index_traits
  */
 - (struct iterator *) allocIterator;
 - (void) initIterator: (struct iterator *) iterator
-			:(enum iterator_type) type;
-- (void) initIteratorByKey: (struct iterator *) iterator
-			:(enum iterator_type) type
-			:(void *) key :(int) part_count;
+		     :(enum iterator_type) type
+		     :(void *) key :(int) part_count;
+
 /**
  * Unsafe search methods that do not check key part count.
  */
 - (struct tuple *) findUnsafe: (void *) key :(int) part_count;
-- (void) initIteratorUnsafe: (struct iterator *) iterator
-			:(enum iterator_type) type
-			:(void *) key :(int) part_count;
-
 #if defined(DEBUG)
 - (void) debugDump:(int) verbose;
 #endif /* defined(DEBUG) */
-
 @end
 
 struct iterator {
 	struct tuple *(*next)(struct iterator *);
-	struct tuple *(*next_equal)(struct iterator *);
 	void (*free)(struct iterator *);
 };
+
+void
+check_key_parts(struct key_def *key_def, int part_count,
+		bool partial_key_allowed);
 
 #endif /* TARANTOOL_BOX_INDEX_H_INCLUDED */

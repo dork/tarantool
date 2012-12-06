@@ -38,13 +38,10 @@
 #include <palloc.h>
 #include <assoc.h>
 
-
-
 static struct mh_i32ptr_t *spaces;
 
 bool secondary_indexes_enabled = false;
 bool primary_indexes_enabled = false;
-
 
 struct space *
 space_create(i32 space_no, struct key_def *key_defs, int key_count, int arity)
@@ -56,7 +53,8 @@ space_create(i32 space_no, struct key_def *key_defs, int key_count, int arity)
 	space = calloc(sizeof(struct space), 1);
 	space->no = space_no;
 
-	mh_i32ptr_put(spaces, space->no, space, NULL);
+	const struct mh_i32ptr_node_t node = { .key = space->no, .val = space };
+	mh_i32ptr_put(spaces, &node, NULL, NULL, NULL);
 
 	space->arity = arity;
 	space->key_defs = key_defs;
@@ -70,10 +68,11 @@ space_create(i32 space_no, struct key_def *key_defs, int key_count, int arity)
 struct space *
 space_by_n(i32 n)
 {
-	mh_int_t space = mh_i32ptr_get(spaces, n);
+	const struct mh_i32ptr_node_t node = { .key = n };
+	mh_int_t space = mh_i32ptr_get(spaces, &node, NULL, NULL);
 	if (space == mh_end(spaces))
 		return NULL;
-	return mh_value(spaces, space);
+	return mh_i32ptr_node(spaces, space)->val;
 }
 
 /** Return the number of active indexes in a space. */
@@ -100,7 +99,7 @@ space_foreach(void (*func)(struct space *sp, void *udata), void *udata) {
 
 	mh_int_t i;
 	mh_foreach(spaces, i) {
-		struct space *space = mh_value(spaces, i);
+		struct space *space = mh_i32ptr_node(spaces, i)->val;
 		func(space, udata);
 	}
 }
@@ -143,10 +142,6 @@ space_validate(struct space *sp, struct tuple *old_tuple,
 	if (n <= 1) {
 		return;
 	}
-
-	/* Check to see if the tuple has a sufficient number of fields. */
-	if (new_tuple->field_count < sp->max_fieldno)
-		tnt_raise(IllegalParams, :"tuple must have all indexed fields");
 
 	if (sp->arity > 0 && sp->arity != new_tuple->field_count)
 		tnt_raise(IllegalParams, :"tuple field count must match space cardinality");
@@ -197,8 +192,8 @@ space_free(void)
 	mh_int_t i;
 
 	mh_foreach(spaces, i) {
-		struct space *space = mh_value(spaces, i);
-		mh_i32ptr_del(spaces, i);
+		struct space *space = mh_i32ptr_node(spaces, i)->val;
+		mh_i32ptr_del(spaces, i, NULL, NULL);
 
 		int j;
 		for (j = 0 ; j < space->key_count; j++) {
@@ -219,6 +214,12 @@ key_init(struct key_def *def, struct tarantool_cfg_space_index *cfg_index)
 {
 	def->max_fieldno = 0;
 	def->part_count = 0;
+	if (strcmp(cfg_index->type, "HASH") == 0)
+		def->type = HASH;
+	else if (strcmp(cfg_index->type, "TREE") == 0)
+		def->type = TREE;
+	else
+		panic("Wrong index type: %s", cfg_index->type);
 
 	/* Calculate key part count and maximal field number. */
 	for (int k = 0; cfg_index->key_field[k] != NULL; ++k) {
@@ -372,7 +373,9 @@ space_config()
 			space->index[j] = index;
 		}
 
-		mh_i32ptr_put(spaces, space->no, space, NULL);
+		const struct mh_i32ptr_node_t node =
+			{ .key = space->no, .val = space };
+		mh_i32ptr_put(spaces, &node, NULL, NULL, NULL);
 		say_info("space %i successfully configured", i);
 	}
 }
@@ -394,7 +397,7 @@ begin_build_primary_indexes(void)
 	mh_int_t i;
 
 	mh_foreach(spaces, i) {
-		struct space *space = mh_value(spaces, i);
+		struct space *space = mh_i32ptr_node(spaces, i)->val;
 		Index *index = space->index[0];
 		[index beginBuild];
 	}
@@ -405,7 +408,7 @@ end_build_primary_indexes(void)
 {
 	mh_int_t i;
 	mh_foreach(spaces, i) {
-		struct space *space = mh_value(spaces, i);
+		struct space *space = mh_i32ptr_node(spaces, i)->val;
 		Index *index = space->index[0];
 		[index endBuild];
 	}
@@ -420,7 +423,7 @@ build_secondary_indexes(void)
 
 	mh_int_t i;
 	mh_foreach(spaces, i) {
-		struct space *space = mh_value(spaces, i);
+		struct space *space = mh_i32ptr_node(spaces, i)->val;
 
 		if (space->key_count <= 1)
 			continue; /* no secondary keys */

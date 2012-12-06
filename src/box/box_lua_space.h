@@ -1,5 +1,5 @@
-#ifndef TARANTOOL_MEMCACHED_H_INCLUDED
-#define TARANTOOL_MEMCACHED_H_INCLUDED
+#ifndef INCLUDES_TARANTOOL_LUA_SPACE_H
+#define INCLUDES_TARANTOOL_LUA_SPACE_H
 /*
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -28,25 +28,10 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <stdarg.h>
+struct lua_State;
+struct space;
 
-struct tarantool_cfg;
+int lbox_pushspace(struct lua_State *L, struct space *space);
+void lbox_space_init(struct lua_State *L);
 
-void
-memcached_init();
-
-void
-memcached_free();
-
-void
-memcached_space_init();
-
-int
-memcached_check_config(struct tarantool_cfg *conf);
-
-void memcached_start_expire();
-void memcached_stop_expire();
-
-void memcached_handler(va_list ap);
-
-#endif /* TARANTOOL_MEMCACHED_H_INCLUDED */
+#endif /* INCLUDES_TARANTOOL_LUA_SPACE_H */

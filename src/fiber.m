@@ -32,7 +32,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assoc.h>
 
 #include <say.h>
 #include <tarantool.h>
@@ -40,6 +39,7 @@
 #include <tbuf.h>
 #include <stat.h>
 #include <pickle.h>
+#include <assoc.h>
 #include "iobuf.h"
 #include <rlist.h>
 
@@ -104,7 +104,7 @@ fiber_wakeup(struct fiber *f)
 	f->flags |= FIBER_READY;
 	if (rlist_empty(&ready_fibers))
 		ev_async_send(&ready_async);
-	rlist_add_tail(&ready_fibers, &f->ready);
+	rlist_move_tail_entry(&ready_fibers, f, state);
 }
 
 /** Cancel the subject fiber.
@@ -215,6 +215,33 @@ fiber_yield(void)
 	coro_transfer(&caller->coro.ctx, &callee->coro.ctx);
 }
 
+
+static void
+fiber_schedule_timeout(ev_watcher *watcher)
+{
+	assert(fiber == &sched);
+	struct { struct fiber *f; bool timed_out; } *state = watcher->data;
+	state->timed_out = true;
+	fiber_call(state->f);
+}
+
+/**
+ * @brief yield & check timeout
+ * @return true if timeout exceeded
+ */
+bool
+fiber_yield_timeout(ev_tstamp delay)
+{
+	struct ev_timer timer;
+	ev_timer_init(&timer, (void *)fiber_schedule_timeout, delay, 0);
+	struct { struct fiber *f; bool timed_out; } state = { fiber, false };
+	timer.data = &state;
+	ev_timer_start(&timer);
+	fiber_yield();
+	ev_timer_stop(&timer);
+	return state.timed_out;
+}
+
 void
 fiber_yield_to(struct fiber *f)
 {
@@ -230,14 +257,7 @@ fiber_yield_to(struct fiber *f)
 void
 fiber_sleep(ev_tstamp delay)
 {
-	ev_timer timer;
-	ev_init(&timer, (void *)fiber_schedule);
-	timer.data = fiber;
-	ev_timer_set(&timer, delay, 0);
-	ev_timer_start(&timer);
-
-	fiber_yield();
-	ev_timer_stop(&timer);
+	fiber_yield_timeout(delay);
 	fiber_testcancel();
 }
 
@@ -272,8 +292,8 @@ fiber_ready_async(void)
 {
 	while(!rlist_empty(&ready_fibers)) {
 		struct fiber *f =
-			rlist_first_entry(&ready_fibers, struct fiber, ready);
-		rlist_del_entry(f, ready);
+			rlist_first_entry(&ready_fibers, struct fiber, state);
+		rlist_del_entry(f, state);
 		fiber_call(f);
 	}
 }
@@ -281,27 +301,30 @@ fiber_ready_async(void)
 struct fiber *
 fiber_find(int fid)
 {
-	mh_int_t k = mh_i32ptr_get(fibers_registry, fid);
+	struct mh_i32ptr_node_t node = { .key = fid };
+	mh_int_t k = mh_i32ptr_get(fibers_registry, &node, NULL, NULL);
 
 	if (k == mh_end(fibers_registry))
 		return NULL;
 	if (!mh_exist(fibers_registry, k))
 		return NULL;
-	return mh_value(fibers_registry, k);
+	return mh_i32ptr_node(fibers_registry, k)->val;
 }
 
 static void
 register_fid(struct fiber *fiber)
 {
 	int ret;
-	mh_i32ptr_put(fibers_registry, fiber->fid, fiber, &ret);
+	struct mh_i32ptr_node_t node = { .key = fiber -> fid, .val = fiber };
+	mh_i32ptr_put(fibers_registry, &node, NULL, NULL, &ret);
 }
 
 static void
 unregister_fid(struct fiber *fiber)
 {
-	mh_int_t k = mh_i32ptr_get(fibers_registry, fiber->fid);
-	mh_i32ptr_del(fibers_registry, k);
+	struct mh_i32ptr_node_t node = { .key = fiber->fid };
+	mh_int_t k = mh_i32ptr_get(fibers_registry, &node, NULL, NULL);
+	mh_i32ptr_del(fibers_registry, k, NULL, NULL);
 }
 
 void
@@ -324,7 +347,7 @@ fiber_zombificate()
 {
 	if (fiber->waiter)
 		fiber_wakeup(fiber->waiter);
-	rlist_del(&fiber->ready);
+	rlist_del(&fiber->state);
 	fiber->waiter = NULL;
 	fiber_set_name(fiber, "zombie");
 	fiber->f = NULL;
@@ -399,7 +422,7 @@ fiber_create(const char *name, void (*f) (va_list))
 		fiber->gc_pool = palloc_create_pool("");
 
 		rlist_add_entry(&fibers, fiber, link);
-		rlist_init(&fiber->ready);
+		rlist_init(&fiber->state);
 	}
 
 
@@ -431,7 +454,7 @@ fiber_destroy(struct fiber *f)
 	if (strcmp(f->name, "sched") == 0)
 		return;
 
-	rlist_del(&f->ready);
+	rlist_del(&f->state);
 	palloc_destroy_pool(f->gc_pool);
 	tarantool_coro_destroy(&f->coro);
 }

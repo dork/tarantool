@@ -205,15 +205,15 @@ replication_prefork()
  */
 
 void
-replication_init()
+replication_init(const char *bind_ipaddr, int replication_port)
 {
-	if (cfg.replication_port == 0)
+	if (replication_port == 0)
 		return;                        /* replication is not in use */
 
 	static struct evio_service replication;
 
-	evio_service_init(&replication, "replication", cfg.bind_ipaddr,
-			  cfg.replication_port, replication_on_accept, NULL);
+	evio_service_init(&replication, "replication", bind_ipaddr,
+			  replication_port, replication_on_accept, NULL);
 
 	evio_service_start(&replication);
 }
@@ -595,7 +595,7 @@ replication_relay_loop(int client_sock)
 	 */
 	struct sockaddr_in peer;
 	socklen_t addrlen = sizeof(peer);
-	getpeername(client_sock, &peer, &addrlen);
+	getpeername(client_sock, ((struct sockaddr*)&peer), &addrlen);
 	snprintf(name, sizeof(name), "relay/%s", sio_strfaddr(&peer));
 	fiber_set_name(fiber, name);
 	set_proc_title("%s%s", name, custom_proc_title);

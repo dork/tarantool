@@ -28,10 +28,8 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#import "object.h"
 #include <util.h>
 #include <tbuf.h>
-#include <iproto.h>
 #include <stdbool.h>
 
 enum {
@@ -105,6 +103,7 @@ const char *request_name(u32 type);
 struct request
 {
 	u32 type;
+	u32 flags;
 	struct tbuf *data;
 };
 

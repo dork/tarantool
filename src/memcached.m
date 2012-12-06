@@ -31,19 +31,18 @@
 
 #include <limits.h>
 
-#include "box.h"
-#include "request.h"
-#include "txn.h"
-#include "tuple.h"
+#include "box/box.h"
+#include "box/request.h"
+#include "box/space.h"
+#include "box/port.h"
+#include "box/tuple.h"
 #include "fiber.h"
 #include "cfg/warning.h"
-#include "cfg/tarantool_box_cfg.h"
+#include  TARANTOOL_CONFIG
 #include "say.h"
 #include "stat.h"
 #include "salloc.h"
 #include "pickle.h"
-#include "space.h"
-#include "port.h"
 #include "coio_buf.h"
 
 #define STAT(_)					\
@@ -118,7 +117,7 @@ store(void *key, u32 exptime, u32 flags, u32 bytes, const char *data)
 	 * Use a box dispatch wrapper which handles correctly
 	 * read-only/read-write modes.
 	 */
-	box_process(&port_null, REPLACE, req);
+	mod_process(&port_null, REPLACE, req);
 }
 
 static void
@@ -133,7 +132,7 @@ delete(void *key)
 	tbuf_append(req, &key_len, sizeof(key_len));
 	tbuf_append_field(req, key);
 
-	box_process(&port_null, DELETE, req);
+	mod_process(&port_null, DELETE, req);
 }
 
 static struct tuple *
@@ -246,7 +245,7 @@ void memcached_get(struct obuf *out, size_t keys_count, struct tbuf *keys,
 		tuple = find(key);
 		key_len = load_varint32(&key);
 
-		if (tuple == NULL || tuple->flags & GHOST) {
+		if (tuple == NULL) {
 			stat_collect(stat_base, MEMC_GET_MISS, 1);
 			stats.get_misses++;
 			continue;
@@ -305,7 +304,7 @@ flush_all(va_list ap)
 	fiber_sleep(delay - ev_now());
 	struct tuple *tuple;
 	struct iterator *it = [memcached_index allocIterator];
-	[memcached_index initIterator: it :ITER_FORWARD];
+	[memcached_index initIterator: it :ITER_ALL :NULL :0];
 	while ((tuple = it->next(it))) {
 	       meta(tuple)->exptime = 1;
 	}
@@ -334,7 +333,7 @@ do {										\
 #include "memcached-grammar.m"
 
 void
-memcached_loop(struct coio *coio, struct iobuf *iobuf)
+memcached_loop(struct ev_io *coio, struct iobuf *iobuf)
 {
 	int rc;
 	int bytes_written;
@@ -374,10 +373,10 @@ memcached_loop(struct coio *coio, struct iobuf *iobuf)
 	}
 }
 
-
-void memcached_handler(va_list ap)
+static void
+memcached_handler(va_list ap)
 {
-	struct coio coio = va_arg(ap, struct coio);
+	struct ev_io coio = va_arg(ap, struct ev_io);
 	struct iobuf *iobuf = va_arg(ap, struct iobuf *);
 	stats.total_connections++;
 	stats.curr_connections++;
@@ -392,7 +391,7 @@ void memcached_handler(va_list ap)
 	} @finally {
 		fiber_sleep(0.01);
 		stats.curr_connections--;
-		coio_close(&coio);
+		evio_close(&coio);
 		iobuf_destroy(iobuf);
 	}
 }
@@ -430,24 +429,33 @@ memcached_check_config(struct tarantool_cfg *conf)
 	return 0;
 }
 
-void
-memcached_init(void)
+static void
+memcached_free(void)
 {
-	if (cfg.memcached_port == 0) {
+	if (memcached_it)
+		memcached_it->free(memcached_it);
+}
+
+
+void
+memcached_init(const char *bind_ipaddr, int memcached_port)
+{
+	if (memcached_port == 0)
 		return;
-	}
+
+	atexit(memcached_free);
 
 	stat_base = stat_register(memcached_stat_strs, memcached_stat_MAX);
 
 	struct space *sp = space_by_n(cfg.memcached_space);
 	memcached_index = space_index(sp, 0);
-}
 
-void
-memcached_free()
-{
-	if (memcached_it)
-		memcached_it->free(memcached_it);
+	/* run memcached server */
+	static struct coio_service memcached;
+	coio_service_init(&memcached, "memcached",
+			  bind_ipaddr, memcached_port,
+			  memcached_handler, NULL);
+	evio_service_start(&memcached.evio_service);
 }
 
 void
@@ -461,6 +469,7 @@ memcached_space_init()
 	struct key_def *key_def = malloc(sizeof(struct key_def));
 	key_def->part_count = 1;
 	key_def->is_unique = true;
+	key_def->type = HASH;
 
 	key_def->parts = malloc(sizeof(struct key_part));
 	key_def->cmp_order = malloc(sizeof(u32));
@@ -524,7 +533,7 @@ memcached_expire_loop(va_list ap __attribute__((unused)))
 	@try {
 restart:
 		if (tuple == NULL)
-			[memcached_index initIterator: memcached_it :ITER_FORWARD];
+			[memcached_index initIterator: memcached_it :ITER_ALL :NULL :0];
 
 		struct tbuf *keys_to_delete = tbuf_alloc(fiber->gc_pool);
 

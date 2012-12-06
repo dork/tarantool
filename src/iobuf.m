@@ -304,14 +304,22 @@ iobuf_destroy(struct iobuf *iobuf)
 
 /** Send all data in the output buffer and garbage collect. */
 ssize_t
-iobuf_flush(struct iobuf *iobuf, struct coio *coio)
+iobuf_flush(struct iobuf *iobuf, struct ev_io *coio)
 {
-	int iovcnt = iobuf->out.pos;
-	if (iobuf->out.iov[iovcnt].iov_len > 0)
-		iovcnt++;
-	ssize_t total = coio_writev(coio, iobuf->out.iov, iovcnt,
+	ssize_t total = coio_writev(coio, iobuf->out.iov,
+				    obuf_iovcnt(&iobuf->out),
 				    obuf_size(&iobuf->out));
 	iobuf_gc(iobuf);
+	/*
+	 * If there is some residue in the input buffer, move it
+	 * but only in case if we don't have cfg_readahead
+	 * bytes available for the next round: it's more efficient
+	 * to move any residue now, when it's likely to be small,
+	 * rather than when we have read a bunch more data, and only
+	 * then discovered we don't have enough space to read a
+	 * full request.
+	 */
+	ibuf_reserve(&iobuf->in, cfg_readahead);
 	return total;
 }
 
@@ -321,19 +329,9 @@ iobuf_gc(struct iobuf *iobuf)
 	/*
 	 * If we happen to have fully processed the input,
 	 * move the pos to the start of the input buffer.
-	 *
-	 * If there is some residue, move it as well,
-	 * but only in case if we don't have cfg_readahead
-	 * bytes available for the next round: it's more efficient
-	 * to move any residue now, when it's likely to be small,
-	 * rather than when we have read a bunch more data, and only
-	 * then discovered we don't have enough space to read a
-	 * full request.
 	 */
 	if (ibuf_size(&iobuf->in) == 0)
 		ibuf_reset(&iobuf->in);
-	else
-		ibuf_reserve(&iobuf->in, cfg_readahead);
 	/* Cheap to do even if already done. */
 	obuf_reset(&iobuf->out);
 }

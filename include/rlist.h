@@ -1,5 +1,33 @@
 #ifndef TARANTOOL_RLIST_H_INCLUDED
 #define TARANTOOL_RLIST_H_INCLUDED
+/*
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above
+ *    copyright notice, this list of conditions and the
+ *    following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above
+ *    copyright notice, this list of conditions and the following
+ *    disclaimer in the documentation and/or other materials
+ *    provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY <COPYRIGHT HOLDER> ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+ * <COPYRIGHT HOLDER> OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+ * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
 /**
  * list entry and head structure
@@ -55,6 +83,18 @@ rlist_del(struct rlist *item)
 	item->prev->next = item->next;
 	item->next->prev = item->prev;
 	rlist_init(item);
+}
+
+inline static struct rlist *
+rlist_shift(struct rlist *head)
+{
+	if (head->next == head->prev)
+                return 0;
+        struct rlist *shift = head->next;
+        head->next = shift->next;
+        shift->next->prev = head;
+        shift->next = shift->prev = shift;
+        return shift;
 }
 
 /**
@@ -115,6 +155,18 @@ rlist_move(struct rlist *to, struct rlist *item)
 }
 
 /**
+@brief delete from one list and add_tail as another's head
+@param to the head that will precede our entry
+@param item the entry to move
+*/
+static inline void
+rlist_move_tail(struct rlist *to, struct rlist *item)
+{
+	rlist_del(item);
+	rlist_add_tail(to, item);
+}
+
+/**
  * allocate and init head of list
  */
 #define RLIST_HEAD(name)	\
@@ -132,6 +184,10 @@ rlist_move(struct rlist *to, struct rlist *item)
  */
 #define rlist_first_entry(head, type, member)				\
 	rlist_entry(rlist_first(head), type, member)
+
+#define rlist_shift_entry(head, type, member) ({			\
+        struct rlist *_shift = rlist_shift(head);			\
+        _shift ? rlist_entry(_shift, type, member) : 0; })
 
 /**
  * return last entry
@@ -168,6 +224,12 @@ delete from one list and add as another's head
 */
 #define rlist_move_entry(to, item, member) \
 	rlist_move((to), &((item)->member))
+
+/**
+delete from one list and add_tail as another's head
+*/
+#define rlist_move_tail_entry(to, item, member) \
+	rlist_move_tail((to), &((item)->member))
 
 /**
  * delete entry from list

@@ -29,8 +29,11 @@
  * SUCH DAMAGE.
  */
 #include <sys/uio.h>
+#include <stdbool.h>
 #include "util.h"
 #include "third_party/queue.h"
+
+struct ev_io;
 
 /** {{{ Input buffer.
  *
@@ -77,6 +80,15 @@ ibuf_unused(struct ibuf *ibuf)
 	return ibuf->buf + ibuf->capacity - ibuf->end;
 }
 
+/* Integer value of the position in the buffer - stable
+ * in case of realloc.
+ */
+static inline size_t
+ibuf_pos(struct ibuf *ibuf)
+{
+	return ibuf->pos - ibuf->buf;
+}
+
 /* }}} */
 
 /* {{{ Output buffer. */
@@ -116,6 +128,14 @@ obuf_size(struct obuf *obuf)
 {
 	return obuf->size;
 }
+
+/** The size of iov vector in the buffer. */
+static inline int
+obuf_iovcnt(struct obuf *buf)
+{
+	return buf->iov[buf->pos].iov_len > 0 ? buf->pos + 1 : buf->pos;
+}
+
 /**
  * Reserve size bytes in the output buffer
  * and return a pointer to the reserved
@@ -159,6 +179,13 @@ obuf_create_svp(struct obuf *buf)
 	return svp;
 }
 
+/** Convert a savepoint position to a pointer in the buffer. */
+static inline void *
+obuf_svp_to_ptr(struct obuf *buf, struct obuf_svp *svp)
+{
+	return buf->iov[svp->pos].iov_base + svp->iov_len;
+}
+
 /** Forget anything added to output buffer after the savepoint. */
 void
 obuf_rollback_to_svp(struct obuf *buf, struct obuf_svp *svp);
@@ -184,13 +211,11 @@ iobuf_create(const char *name);
 void
 iobuf_destroy(struct iobuf *iobuf);
 
-struct coio;
-
 /** Flush output using cooperative I/O and garbage collect.
  * @return number of bytes written
  */
 ssize_t
-iobuf_flush(struct iobuf *iobuf, struct coio *coio);
+iobuf_flush(struct iobuf *iobuf, struct ev_io *coio);
 
 /**
  * Must be called when we are done sending all output,
@@ -200,6 +225,17 @@ iobuf_flush(struct iobuf *iobuf, struct coio *coio);
 void
 iobuf_gc(struct iobuf *iobuf);
 
+/** Return true if there is no input and no output. */
+static inline bool
+iobuf_is_idle(struct iobuf *iobuf)
+{
+	return ibuf_size(&iobuf->in) == 0 && obuf_size(&iobuf->out) == 0;
+}
+
+/**
+ * Network readahead. A signed integer to avoid
+ * automatic type coercion to an unsigned type.
+ */
 extern int cfg_readahead;
 
 static inline void

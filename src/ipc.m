@@ -26,33 +26,32 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
 #include "ipc.h"
 #include "fiber.h"
 #include <stdlib.h>
 #include <rlist.h>
 
+const ev_tstamp IPC_TIMEOUT_INFINITY = 365*86400*100.0;
 
 struct ipc_channel {
-	struct rlist readers, writers, wakeup;
+	struct rlist readers, writers;
 	unsigned size;
 	unsigned beg;
 	unsigned count;
 
 	void *bcast_msg;
-	struct fiber *bcast;
 
 	void *item[0];
-} __attribute__((packed));
+};
 
-int
-ipc_channel_isempty(struct ipc_channel *ch)
+bool
+ipc_channel_is_empty(struct ipc_channel *ch)
 {
 	return ch->count == 0;
 }
 
-int
-ipc_channel_isfull(struct ipc_channel *ch)
+bool
+ipc_channel_is_full(struct ipc_channel *ch)
 {
 	return ch->count >= ch->size;
 }
@@ -73,69 +72,58 @@ ipc_channel_alloc(unsigned size)
 void
 ipc_channel_init(struct ipc_channel *ch)
 {
-
 	ch->beg = ch->count = 0;
-	ch->bcast = NULL;
-
 	rlist_init(&ch->readers);
 	rlist_init(&ch->writers);
-	rlist_init(&ch->wakeup);
+}
+
+void
+ipc_channel_cleanup(struct ipc_channel *ch)
+{
+	while (!rlist_empty(&ch->writers)) {
+		struct fiber *f =
+			rlist_first_entry(&ch->writers, struct fiber, state);
+		rlist_del_entry(f, state);
+	}
+	while (!rlist_empty(&ch->readers)) {
+		struct fiber *f =
+			rlist_first_entry(&ch->readers, struct fiber, state);
+		rlist_del_entry(f, state);
+	}
 }
 
 void *
 ipc_channel_get_timeout(struct ipc_channel *ch, ev_tstamp timeout)
 {
-	if (timeout < 0)
-		timeout = 0;
 	/* channel is empty */
 	if (!ch->count) {
-		rlist_add_tail_entry(&ch->readers, fiber, ifc);
+		rlist_add_tail_entry(&ch->readers, fiber, state);
 		bool cancellable = fiber_setcancellable(true);
 
-		if (timeout) {
-			ev_timer timer;
-			ev_init(&timer, (void *)fiber_schedule);
-			ev_timer_set(&timer, timeout, 0);
-			timer.data = fiber;
-			ev_timer_start(&timer);
-			fiber_yield();
-			ev_timer_stop(&timer);
-
-/*                         ev_timer_set(&fiber->timer, timeout, 0); */
-/*                         ev_timer_start(&fiber->timer); */
-/*                         fiber_yield(); */
-/*                         ev_timer_stop(&fiber->timer); */
-		} else {
-			fiber_yield();
-		}
-
-
-		rlist_del_entry(fiber, ifc);
+		bool timed_out = fiber_yield_timeout(timeout);
+		rlist_del_entry(fiber, state);
 
 		fiber_testcancel();
 		fiber_setcancellable(cancellable);
 
-		if (ch->bcast) {
-			fiber_wakeup(ch->bcast);
-			ch->bcast = NULL;
+		if (timed_out)
+			return NULL;
+
+		if (fiber->waiter) {
+			fiber_wakeup(fiber->waiter);
 			return ch->bcast_msg;
 		}
 	}
 
-	/* timeout */
-	if (!ch->count)
-		return NULL;
-
-	void *res = ch->item[ ch->beg ];
+	void *res = ch->item[ch->beg];
 	if (++ch->beg >= ch->size)
 		ch->beg -= ch->size;
 	ch->count--;
 
 	if (!rlist_empty(&ch->writers)) {
 		struct fiber *f =
-			rlist_first_entry(&ch->writers, struct fiber, ifc);
-		rlist_del_entry(f, ifc);
-		rlist_add_tail_entry(&ch->wakeup, f, ifc);
+			rlist_first_entry(&ch->writers, struct fiber, state);
+		rlist_del_entry(f, state);
 		fiber_wakeup(f);
 	}
 
@@ -145,47 +133,31 @@ ipc_channel_get_timeout(struct ipc_channel *ch, ev_tstamp timeout)
 void *
 ipc_channel_get(struct ipc_channel *ch)
 {
-	return ipc_channel_get_timeout(ch, 0);
+	return ipc_channel_get_timeout(ch, IPC_TIMEOUT_INFINITY);
 }
 
 int
 ipc_channel_put_timeout(struct ipc_channel *ch, void *data,
-							ev_tstamp timeout)
+			ev_tstamp timeout)
 {
-	if (timeout < 0)
-		timeout = 0;
-
 	/* channel is full */
 	if (ch->count >= ch->size) {
 
-		rlist_add_tail_entry(&ch->writers, fiber, ifc);
+		rlist_add_tail_entry(&ch->writers, fiber, state);
 
 		bool cancellable = fiber_setcancellable(true);
-		if (timeout) {
-			ev_timer timer;
-			ev_init(&timer, (void *)fiber_schedule);
-			ev_timer_set(&timer, timeout, 0);
-			timer.data = fiber;
-			ev_timer_start(&timer);
-			fiber_yield();
-			ev_timer_stop(&timer);
-
-/*                         ev_timer_set(&fiber->timer, timeout, 0); */
-/*                         ev_timer_start(&fiber->timer); */
-/*                         fiber_yield(); */
-/*                         ev_timer_stop(&fiber->timer); */
-		} else {
-			fiber_yield();
-		}
-
-		rlist_del_entry(fiber, ifc);
+		bool timed_out = fiber_yield_timeout(timeout);
+		rlist_del_entry(fiber, state);
 
 		fiber_testcancel();
 		fiber_setcancellable(cancellable);
-	}
 
-	if (ch->count >= ch->size)
-		return ETIMEDOUT;
+		if (timed_out) {
+			errno = ETIMEDOUT;
+			return -1;
+		}
+
+	}
 
 	unsigned i = ch->beg;
 	i += ch->count;
@@ -196,9 +168,8 @@ ipc_channel_put_timeout(struct ipc_channel *ch, void *data,
 	ch->item[i] = data;
 	if (!rlist_empty(&ch->readers)) {
 		struct fiber *f =
-			rlist_first_entry(&ch->readers, struct fiber, ifc);
-		rlist_del_entry(f, ifc);
-		rlist_add_tail_entry(&ch->wakeup, f, ifc);
+			rlist_first_entry(&ch->readers, struct fiber, state);
+		rlist_del_entry(f, state);
 		fiber_wakeup(f);
 	}
 	return 0;
@@ -207,16 +178,16 @@ ipc_channel_put_timeout(struct ipc_channel *ch, void *data,
 void
 ipc_channel_put(struct ipc_channel *ch, void *data)
 {
-	ipc_channel_put_timeout(ch, data, 0);
+	ipc_channel_put_timeout(ch, data, IPC_TIMEOUT_INFINITY);
 }
 
-int
+bool
 ipc_channel_has_readers(struct ipc_channel *ch)
 {
 	return !rlist_empty(&ch->readers);
 }
 
-int
+bool
 ipc_channel_has_writers(struct ipc_channel *ch)
 {
 	return !rlist_empty(&ch->writers);
@@ -232,20 +203,20 @@ ipc_channel_broadcast(struct ipc_channel *ch, void *data)
 
 	struct fiber *f;
 	int count = 0;
-	rlist_foreach_entry(f, &ch->readers, ifc) {
+	rlist_foreach_entry(f, &ch->readers, state) {
 		count++;
 	}
 
 	for (int i = 0; i < count && !rlist_empty(&ch->readers); i++) {
 		struct fiber *f =
-			rlist_first_entry(&ch->readers, struct fiber, ifc);
-		rlist_del_entry(f, ifc);
-		rlist_add_tail_entry(&ch->wakeup, f, ifc);
-		ch->bcast = fiber;
+			rlist_first_entry(&ch->readers, struct fiber, state);
+		rlist_del_entry(f, state);
+		assert(f->waiter == NULL);
+		f->waiter = fiber;
 		ch->bcast_msg = data;
 		fiber_wakeup(f);
 		fiber_yield();
-		ch->bcast = NULL;
+		f->waiter = NULL;
 		fiber_testcancel();
 		if (rlist_empty(&ch->readers)) {
 			count = i;

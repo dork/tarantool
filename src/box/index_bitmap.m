@@ -200,7 +200,7 @@ iterator_wrapper_free(struct iterator *iterator)
 
 	struct iterator *it = pk->position;
 	struct tuple *tuple;
-	[pk initIterator: it :ITER_FORWARD];
+	[pk initIterator: it :ITER_ALL :NULL :0];
 
 	while ((tuple = it->next(it)))
 		[self replace: NULL :tuple];
@@ -242,9 +242,7 @@ iterator_wrapper_free(struct iterator *iterator)
 	struct iterator_wrapper *it = malloc(sizeof(struct iterator_wrapper));
 	if (it) {
 		memset(it, 0, sizeof(struct iterator_wrapper));
-		/* TODO(roman): ?? next vs next_equal */
 		it->base.next = iterator_wrapper_next;
-		it->base.next_equal = iterator_wrapper_next;
 		it->base.free = iterator_wrapper_free;
 
 		it->bitmap_expr = bitmap_expr_new();
@@ -343,41 +341,27 @@ iterator_wrapper_free(struct iterator *iterator)
 	return [self replace :tuple :NULL];
 }
 
-- (void) initIterator: (struct iterator *) iterator :(enum iterator_type) type
+- (void) initIterator: (struct iterator *) iterator
+	:(enum iterator_type) type
+	:(void *) key :(int) part_count
 {
-	(void) iterator;
-	(void) type;
-
-	if (type != ITER_FORWARD) {
-		tnt_raise(ClientError, :ER_UNSUPPORTED, "BitmapIndex",
-			  "start value needed");
-	}
-
-	u8 key[4];
-	int part_count = 1;
-	save_varint32(key, 0);
-	[self initIteratorUnsafe: iterator :type :key :part_count];
-}
-
-- (void) initIteratorUnsafe: (struct iterator *) iterator :(enum iterator_type) type
-			:(void *) key :(int) part_count
-{
-	(void) part_count;
-
-	assert(iterator->next == iterator_wrapper_next);
+	assert(iterator->free == iterator_wrapper_free);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
+
+	check_key_parts(key_def, part_count,
+			bitmap_index_traits.allows_partial_key);
 
 	void *bitmap_key = NULL;
 	size_t bitmap_key_size = 0;
 	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
 
-#ifdef DEBUG
-	say_debug("BitmapIndex: initIteratorUnsafe");
-#endif /* DEBUG */
-
 	int rc = 0;
 	switch (type) {
-	case ITER_FORWARD:
+	case ITER_ALL:
+		bitmap_expr_clear(it->bitmap_expr);
+		rc = 0;
+		break;
+	case ITER_EQ:
 		rc = bitmap_index_iterate_equals(
 					index, it->bitmap_expr,
 					bitmap_key, bitmap_key_size);

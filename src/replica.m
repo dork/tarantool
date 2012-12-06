@@ -41,13 +41,15 @@ static void
 remote_apply_row(struct recovery_state *r, struct tbuf *row);
 
 static struct tbuf
-remote_read_row(struct coio *coio, struct iobuf *iobuf)
+remote_read_row(struct ev_io *coio, struct iobuf *iobuf)
 {
 	struct ibuf *in = &iobuf->in;
 	ssize_t to_read = sizeof(struct header_v11) - ibuf_size(in);
 
-	if (to_read > 0)
+	if (to_read > 0) {
+		ibuf_reserve(in, cfg_readahead);
 		coio_breadn(coio, in, to_read);
+	}
 
 	ssize_t request_len = ((struct header_v11 *)in->pos)->len + sizeof(struct header_v11);
 	to_read = request_len - ibuf_size(in);
@@ -64,7 +66,7 @@ remote_read_row(struct coio *coio, struct iobuf *iobuf)
 }
 
 static void
-remote_connect(struct coio *coio, struct sockaddr_in *remote_addr,
+remote_connect(struct ev_io *coio, struct sockaddr_in *remote_addr,
 	       i64 initial_lsn, const char **err)
 {
 	*err = "can't connect to master";
@@ -88,18 +90,18 @@ static void
 pull_from_remote(va_list ap)
 {
 	struct recovery_state *r = va_arg(ap, struct recovery_state *);
-	struct coio coio;
+	struct ev_io coio;
 	struct iobuf *iobuf = NULL;
 	bool warning_said = false;
 	const int reconnect_delay = 1;
 
-	coio_clear(&coio);
+	evio_clear(&coio);
 
 	for (;;) {
 		const char *err = NULL;
 		@try {
 			fiber_setcancellable(true);
-			if (! coio_is_connected(&coio)) {
+			if (! evio_is_connected(&coio)) {
 				if (iobuf == NULL)
 					iobuf = iobuf_create(fiber->name);
 				remote_connect(&coio, &r->remote->addr,
@@ -120,7 +122,7 @@ pull_from_remote(va_list ap)
 			fiber_gc();
 		} @catch (FiberCancelException *e) {
 			iobuf_destroy(iobuf);
-			coio_close(&coio);
+			evio_close(&coio);
 			@throw;
 		} @catch (tnt_Exception *e) {
 			[e log];
@@ -130,7 +132,7 @@ pull_from_remote(va_list ap)
 				say_info("will retry every %i second", reconnect_delay);
 				warning_said = true;
 			}
-			coio_close(&coio);
+			evio_close(&coio);
 			fiber_sleep(reconnect_delay);
 		}
 	}
@@ -139,27 +141,12 @@ pull_from_remote(va_list ap)
 static void
 remote_apply_row(struct recovery_state *r, struct tbuf *row)
 {
-	struct tbuf *data;
 	i64 lsn = header_v11(row)->lsn;
-	u16 tag;
-	u16 op;
 
-	/* save row data since row_handler() may clobber it */
-	data = tbuf_alloc(row->pool);
-	tbuf_append(data, row->data + sizeof(struct header_v11), header_v11(row)->len);
+	assert(*(uint16_t*)(row->data + sizeof(struct header_v11)) == XLOG);
 
 	if (r->row_handler(r->row_handler_param, row) < 0)
 		panic("replication failure: can't apply row");
-
-	tag = read_u16(data);
-	(void) tag;
-	(void) read_u64(data); /* drop the cookie */
-	op = read_u16(data);
-
-	assert(tag == XLOG);
-
-	if (wal_write(r, lsn, r->remote->cookie, op, data))
-		panic("replication failure: can't write row to WAL");
 
 	set_lsn(r, lsn);
 }
