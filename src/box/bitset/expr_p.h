@@ -1,5 +1,5 @@
-#ifndef BITMAP_EXPR_P_H_INCLUDED
-#define BITMAP_EXPR_P_H_INCLUDED
+#ifndef BITSET_EXPR_P_H_INCLUDED
+#define BITSET_EXPR_P_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -38,11 +38,11 @@
 
 #include "expr.h"
 
-struct bitmap_expr_group {
-	/** operation to combine (reduce) bitmaps during iterations **/
-	enum bitmap_binary_op reduce_op; /* only AND, OR, XOR supported */
+struct bitset_expr_group {
+	/** operation to combine (reduce) bitsets during iterations **/
+	enum bitset_binary_op reduce_op; /* only AND, OR, XOR supported */
 	/** operation to apply after combining */
-	enum bitmap_unary_op post_op; /* not supported yet */
+	enum bitset_unary_op post_op; /* not supported yet */
 
 	/** number of elements in the group */
 	size_t elements_size;
@@ -50,17 +50,17 @@ struct bitmap_expr_group {
 	size_t elements_capacity;
 
 	/** elements */
-	struct bitmap_expr_group_element {
-		/** operation to apply to source bitmap before reducing */
-		enum bitmap_unary_op pre_op;
-		/** source bitmap */
-		struct bitmap *bitmap;
+	struct bitset_expr_group_element {
+		/** operation to apply to source bitset before reducing */
+		enum bitset_unary_op pre_op;
+		/** source bitset */
+		struct bitset *bitset;
 	} elements[];
 };
 
-struct bitmap_expr {
+struct bitset_expr {
 	/** groups */
-	struct bitmap_expr_group **groups;
+	struct bitset_expr_group **groups;
 	/** number of active groups in the expr */
 	size_t groups_size;
 	/** number of alloacted groups in the expr */
@@ -72,4 +72,4 @@ struct bitmap_expr {
 extern const size_t EXPR_DEFAULT_CAPACITY;
 extern const size_t EXPR_GROUP_DEFAULT_CAPACITY;
 
-#endif /* BITMAP_EXPR_P_H_INCLUDED */
+#endif /* BITSET_EXPR_P_H_INCLUDED */

@@ -1,7 +1,7 @@
-add_library(bitmap STATIC
-    bitmap.h
-    bitmap_p.h
-    bitmap.c
+add_library(bitset STATIC
+    bitset.h
+    bitset_p.h
+    bitset.c
     iterator.h
     iterator.c
     index.h
@@ -13,6 +13,6 @@ add_library(bitmap STATIC
     expr.c
 )
 
-set_target_properties(bitmap
+set_target_properties(bitset
     PROPERTIES COMPILE_FLAGS "-std=c99 -Wall")
 

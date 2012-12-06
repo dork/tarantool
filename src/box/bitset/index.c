@@ -32,30 +32,30 @@
 #include <errno.h>
 #include <limits.h>
 
-#include "bitmap_p.h"
+#include "bitset_p.h"
 
-struct bitmap_index {
-	struct bitmap **bitmaps;
-	size_t bitmaps_size;
+struct bitset_index {
+	struct bitset **bitsets;
+	size_t bitsets_size;
 };
 
-int bitmap_index_new(struct bitmap_index **pindex, size_t initial_size)
+int bitset_index_new(struct bitset_index **pindex, size_t initial_size)
 {
 	int rc = -1;
 
-	*pindex = calloc(1, sizeof(struct bitmap_index));
+	*pindex = calloc(1, sizeof(struct bitset_index));
 	if (*pindex == NULL) {
 		goto error_0;
 	}
 
-	struct bitmap_index *index = *pindex;
-	index->bitmaps = calloc(initial_size+1, sizeof(*index->bitmaps));
-	if (index->bitmaps == NULL) {
+	struct bitset_index *index = *pindex;
+	index->bitsets = calloc(initial_size+1, sizeof(*index->bitsets));
+	if (index->bitsets == NULL) {
 		goto error_1;
 	}
 
-	index->bitmaps_size = initial_size+1;
-	if (bitmap_new(&(index->bitmaps[0])) < 0) {
+	index->bitsets_size = initial_size+1;
+	if (bitset_new(&(index->bitsets[0])) < 0) {
 		goto error_2;
 	}
 
@@ -63,7 +63,7 @@ int bitmap_index_new(struct bitmap_index **pindex, size_t initial_size)
 
 	/* error handling */
 error_2:
-	free(index->bitmaps);
+	free(index->bitsets);
 error_1:
 	free(*pindex);
 error_0:
@@ -71,16 +71,16 @@ error_0:
 	return rc;
 }
 
-void bitmap_index_free(struct bitmap_index **pindex)
+void bitset_index_free(struct bitset_index **pindex)
 {
-	struct bitmap_index *index = *pindex;
+	struct bitset_index *index = *pindex;
 	if (index != NULL) {
-		for(size_t b = 0; b < index->bitmaps_size; b++) {
-			if (index->bitmaps[b] == NULL) {
+		for(size_t b = 0; b < index->bitsets_size; b++) {
+			if (index->bitsets[b] == NULL) {
 				continue;
 			}
 
-			bitmap_free(&(index->bitmaps[b]));
+			bitset_free(&(index->bitsets[b]));
 		}
 		free(index);
 	}
@@ -88,122 +88,122 @@ void bitmap_index_free(struct bitmap_index **pindex)
 	*pindex = NULL;
 }
 
-int bitmap_index_insert(struct bitmap_index *index,
+int bitset_index_insert(struct bitset_index *index,
 			void *key, size_t key_size,
 			size_t value) {
-	size_t bitmaps_size_new = 1 + key_size * CHAR_BIT;
-	if (bitmaps_size_new > index->bitmaps_size) {
+	size_t bitsets_size_new = 1 + key_size * CHAR_BIT;
+	if (bitsets_size_new > index->bitsets_size) {
 		/* Resize index */
-		struct bitmap **bitmaps = realloc(index->bitmaps,
-				bitmaps_size_new * sizeof(*index->bitmaps));
-		if (bitmaps == NULL) {
+		struct bitset **bitsets = realloc(index->bitsets,
+				bitsets_size_new * sizeof(*index->bitsets));
+		if (bitsets == NULL) {
 			return -1;
 		}
 
-		for (size_t b = index->bitmaps_size; b < bitmaps_size_new; b++) {
-			bitmaps[b] = NULL;
+		for (size_t b = index->bitsets_size; b < bitsets_size_new; b++) {
+			bitsets[b] = NULL;
 		}
-		index->bitmaps = bitmaps;
-		index->bitmaps_size = bitmaps_size_new;
+		index->bitsets = bitsets;
+		index->bitsets_size = bitsets_size_new;
 	}
 
-	/* Set bits in bitmaps */
+	/* Set bits in bitsets */
 	size_t pos = 0;
 	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
-		if (index->bitmaps[b] == NULL) {
-			if (bitmap_new(&index->bitmaps[b]) < 0) {
+		if (index->bitsets[b] == NULL) {
+			if (bitset_new(&index->bitsets[b]) < 0) {
 				return -1;
 			}
 		}
 
 		/* TODO(roman): rollback previous operations on error */
-		if (bitmap_set(index->bitmaps[b], value, 1) < 0) {
+		if (bitset_set(index->bitsets[b], value, 1) < 0) {
 			return -1;
 		}
 		pos++;
 	}
 
-	if (bitmap_set(index->bitmaps[0], value, 1) < 0) {
+	if (bitset_set(index->bitsets[0], value, 1) < 0) {
 		return -1;
 	}
 
 	return 0;
 }
 
-int bitmap_index_remove(struct bitmap_index *index,
+int bitset_index_remove(struct bitset_index *index,
 			void *key, size_t key_size,
 			size_t value) {
-	size_t bitmaps_size_needed = 1 + key_size * CHAR_BIT;
-	if (bitmaps_size_needed > index->bitmaps_size) {
+	size_t bitsets_size_needed = 1 + key_size * CHAR_BIT;
+	if (bitsets_size_needed > index->bitsets_size) {
 		return 0;
 	}
 
 	size_t pos = 0;
 	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
-		if (b >= index->bitmaps_size) {
+		if (b >= index->bitsets_size) {
 			break;
 		}
 
-		if (index->bitmaps[b] == NULL) {
+		if (index->bitsets[b] == NULL) {
 			continue;
 		}
 
 		/* TODO(roman): rollback previous operations on error */
-		if (bitmap_set(index->bitmaps[b], value, 0) < 0) {
+		if (bitset_set(index->bitsets[b], value, 0) < 0) {
 			return -1;
 		}
 		pos++;
 	}
 
-	if (bitmap_set(index->bitmaps[0], value, 0) < 0) {
+	if (bitset_set(index->bitsets[0], value, 0) < 0) {
 		return -1;
 	}
 
 	return 0;
 }
 
-int bitmap_index_iterate_equals(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_equals(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size)
 {
 	assert (index != NULL);
 	assert (expr != NULL);
 
-	bitmap_expr_clear(expr);
+	bitset_expr_clear(expr);
 
-	if (bitmap_expr_add_group(expr, BITMAP_OP_AND, BITMAP_OP_NULL) != 0) {
+	if (bitset_expr_add_group(expr, BITSET_OP_AND, BITSET_OP_NULL) != 0) {
 		return -1;
 	}
 
 	for (size_t pos = 0; pos < key_size * CHAR_BIT; pos++) {
 		size_t b = pos + 1;
 		if (test_bit(key, pos)) {
-			if (index->bitmaps[b] == NULL) {
-				bitmap_expr_group_clear(expr, 0);
+			if (index->bitsets[b] == NULL) {
+				bitset_expr_group_clear(expr, 0);
 				break;
 			}
 
-			if (bitmap_expr_group_add_bitmap(expr, 0,
-				index->bitmaps[b], BITMAP_OP_NULL) != 0) {
+			if (bitset_expr_group_add_bitset(expr, 0,
+				index->bitsets[b], BITSET_OP_NULL) != 0) {
 				return -1;
 			}
 		} else {
-			if (index->bitmaps[b] == NULL) {
+			if (index->bitsets[b] == NULL) {
 				continue;
 			}
 
-			if (bitmap_expr_group_add_bitmap(expr, 0,
-				index->bitmaps[b], BITMAP_OP_NOT) != 0) {
+			if (bitset_expr_group_add_bitset(expr, 0,
+				index->bitsets[b], BITSET_OP_NOT) != 0) {
 				return -1;
 			}
 		}
 	}
 
-	if (bitmap_expr_group_add_bitmap(expr, 0,
-		index->bitmaps[0], BITMAP_OP_NULL) != 0) {
+	if (bitset_expr_group_add_bitset(expr, 0,
+		index->bitsets[0], BITSET_OP_NULL) != 0) {
 		return -1;
 	}
 
@@ -211,35 +211,35 @@ int bitmap_index_iterate_equals(
 }
 
 static inline
-int bitmap_index_iterate_all_set2(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_all_set2(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size,
-			enum bitmap_unary_op pre_op)
+			enum bitset_unary_op pre_op)
 {
 	assert (index != NULL);
 	assert (expr != NULL);
 
-	bitmap_expr_clear(expr);
+	bitset_expr_clear(expr);
 
-	if (bitmap_expr_add_group(expr, BITMAP_OP_AND, BITMAP_OP_NULL) != 0) {
+	if (bitset_expr_add_group(expr, BITSET_OP_AND, BITSET_OP_NULL) != 0) {
 		return -1;
 	}
 
-	if (bitmap_expr_group_add_bitmap(expr, 0,
-		index->bitmaps[0], BITMAP_OP_NULL) != 0) {
+	if (bitset_expr_group_add_bitset(expr, 0,
+		index->bitsets[0], BITSET_OP_NULL) != 0) {
 		return -1;
 	}
 
 	size_t pos = 0;
 	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
-		if (index->bitmaps[b] == NULL || b >= index->bitmaps_size) {
-			bitmap_expr_clear(expr);
+		if (index->bitsets[b] == NULL || b >= index->bitsets_size) {
+			bitset_expr_clear(expr);
 			break;
 		}
-		if (bitmap_expr_group_add_bitmap(expr, 0,
-			index->bitmaps[b], pre_op) != 0) {
+		if (bitset_expr_group_add_bitset(expr, 0,
+			index->bitsets[b], pre_op) != 0) {
 			return -1;
 		}
 
@@ -249,35 +249,35 @@ int bitmap_index_iterate_all_set2(
 	return 0;
 }
 
-int bitmap_index_iterate_all_set(struct bitmap_index *index,
-				 struct bitmap_expr *expr,
+int bitset_index_iterate_all_set(struct bitset_index *index,
+				 struct bitset_expr *expr,
 				 void *key, size_t key_size)
 {
-	return bitmap_index_iterate_all_set2(index, expr, key, key_size,
-					    BITMAP_OP_NULL);
+	return bitset_index_iterate_all_set2(index, expr, key, key_size,
+					    BITSET_OP_NULL);
 }
 
-int bitmap_index_iterate_all_not_set(struct bitmap_index *index,
-				 struct bitmap_expr *expr,
+int bitset_index_iterate_all_not_set(struct bitset_index *index,
+				 struct bitset_expr *expr,
 				 void *key, size_t key_size)
 {
-	return bitmap_index_iterate_all_set2(index, expr, key, key_size,
-					    BITMAP_OP_NOT);
+	return bitset_index_iterate_all_set2(index, expr, key, key_size,
+					    BITSET_OP_NOT);
 }
 
 static inline
-int bitmap_index_iterate_any_set2(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_any_set2(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size,
-			enum bitmap_unary_op pre_op)
+			enum bitset_unary_op pre_op)
 {
 	assert (index != NULL);
 	assert (expr != NULL);
 
-	bitmap_expr_clear(expr);
+	bitset_expr_clear(expr);
 
-	if (bitmap_expr_add_group(expr, BITMAP_OP_OR, BITMAP_OP_NULL) != 0) {
+	if (bitset_expr_add_group(expr, BITSET_OP_OR, BITSET_OP_NULL) != 0) {
 		return -1;
 	}
 
@@ -285,64 +285,64 @@ int bitmap_index_iterate_any_set2(
 	     find_next_set_bit(key, key_size, &pos) == 0;
 	     pos++) {
 		size_t b = pos + 1;
-		if (index->bitmaps[b] == NULL) {
-			/* do not have bitmap for this bit */
+		if (index->bitsets[b] == NULL) {
+			/* do not have bitset for this bit */
 			continue;
 		}
 
-		if (bitmap_expr_group_add_bitmap(expr, 0,
-			index->bitmaps[b], pre_op) != 0) {
+		if (bitset_expr_group_add_bitset(expr, 0,
+			index->bitsets[b], pre_op) != 0) {
 			return -1;
 		}
 	}
 
-	if (bitmap_expr_add_group(expr, BITMAP_OP_AND, BITMAP_OP_NULL) != 0) {
+	if (bitset_expr_add_group(expr, BITSET_OP_AND, BITSET_OP_NULL) != 0) {
 		return -1;
 	}
 
-	if (bitmap_expr_group_add_bitmap(expr, 1,
-		index->bitmaps[0], BITMAP_OP_NULL) != 0) {
+	if (bitset_expr_group_add_bitset(expr, 1,
+		index->bitsets[0], BITSET_OP_NULL) != 0) {
 		return -1;
 	}
 
 	return 0;
 }
 
-int bitmap_index_iterate_any_set(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_any_set(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size)
 {
-	return bitmap_index_iterate_any_set2(index, expr, key, key_size,
-					     BITMAP_OP_NULL);
+	return bitset_index_iterate_any_set2(index, expr, key, key_size,
+					     BITSET_OP_NULL);
 }
 
-int bitmap_index_iterate_any_not_set(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_any_not_set(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size)
 {
-	return bitmap_index_iterate_any_set2(index, expr, key, key_size,
-					     BITMAP_OP_NOT);
+	return bitset_index_iterate_any_set2(index, expr, key, key_size,
+					     BITSET_OP_NOT);
 }
 
-bool bitmap_index_contains_value(struct bitmap_index *index, size_t value) {
-	return bitmap_get(index->bitmaps[0], value);
+bool bitset_index_contains_value(struct bitset_index *index, size_t value) {
+	return bitset_get(index->bitsets[0], value);
 }
 
-size_t bitmap_index_size(struct bitmap_index *index)
+size_t bitset_index_size(struct bitset_index *index)
 {
-	return bitmap_cardinality(index->bitmaps[0]);
+	return bitset_cardinality(index->bitsets[0]);
 }
 
 #if defined(DEBUG)
-void bitmap_index_dump(struct bitmap_index *index,
+void bitset_index_dump(struct bitset_index *index,
 		       int verbose, FILE *stream)
 {
-	struct bitmap_stat stat;
-	bitmap_stat(index->bitmaps[0], &stat);
+	struct bitset_stat stat;
+	bitset_stat(index->bitsets[0], &stat);
 
-	fprintf(stream, "BitmapIndex %p\n", index);
+	fprintf(stream, "BitsetIndex %p\n", index);
 	fprintf(stream, "{\n");
 	fprintf(stream, "    " "features    = ");
 	fprintf(stream, "%cAVX ", stat.have_avx ? '+' : '-');
@@ -358,13 +358,13 @@ void bitmap_index_dump(struct bitmap_index *index,
 
 	fprintf(stream, "    " "size        = %-20zu"
 			" // number of values in the index\n",
-		bitmap_index_size(index));
+		bitset_index_size(index));
 
-	fprintf(stream, "    " "/* bitmaps */\n");
+	fprintf(stream, "    " "/* bitsets */\n");
 	fprintf(stream, "    "
-		"// bits i nbitmap #0 set for each value in the index\n");
+		"// bits i nbitset #0 set for each value in the index\n");
 	fprintf(stream, "    "
-		"// bitmap #(i) => bit #(i-1) in key\n");
+		"// bitset #(i) => bit #(i-1) in key\n");
 
 	/* can overflow, but what can i do? */
 	size_t total_capacity = 0;
@@ -373,13 +373,13 @@ void bitmap_index_dump(struct bitmap_index *index,
 	size_t total_mem_other = 0;
 	size_t total_pages = 0;
 
-	for (size_t b = 0; b < index->bitmaps_size; b++) {
-		if (index->bitmaps[b] == NULL) {
+	for (size_t b = 0; b < index->bitsets_size; b++) {
+		if (index->bitsets[b] == NULL) {
 			continue;
 		}
 
-		bitmap_stat(index->bitmaps[b], &stat);
-		fprintf(stream, "    " "bitmap #%-4zu {", b);
+		bitset_stat(index->bitsets[b], &stat);
+		fprintf(stream, "    " "bitset #%-4zu {", b);
 		if (stat.capacity > 0) {
 			fprintf(stream,
 				"utilization   = %8.4f%% (%zu / %zu) ",
@@ -404,10 +404,10 @@ void bitmap_index_dump(struct bitmap_index *index,
 		total_mem_other += stat.mem_other;
 		total_pages += stat.pages;
 	}
-	fprintf(stream, "    " "/* end of bitmaps */\n");
+	fprintf(stream, "    " "/* end of bitsets */\n");
 
-	total_mem_other += sizeof(struct bitmap_index) +
-			sizeof(struct bitmap*) * index->bitmaps_size;
+	total_mem_other += sizeof(struct bitset_index) +
+			sizeof(struct bitset*) * index->bitsets_size;
 
 	fprintf(stream, "    " "pages       = %zu\n", total_pages);
 	fprintf(stream, "    " "capacity    = %zu (%zu * %d)\n",
@@ -415,7 +415,7 @@ void bitmap_index_dump(struct bitmap_index *index,
 		total_pages,
 		stat.page_bit);
 	fprintf(stream, "    "
-		"cardinality = %zu // total for all bitmaps\n",
+		"cardinality = %zu // total for all bitsets\n",
 		total_cardinality);
 	if (total_capacity > 0) {
 		fprintf(stream, "    "
@@ -438,7 +438,7 @@ void bitmap_index_dump(struct bitmap_index *index,
 
 	if (total_cardinality > 0) {
 		fprintf(stream, "    " "bit_per_val = %-10.4f\n",
-			(float) total_cardinality / bitmap_index_size(index));
+			(float) total_cardinality / bitset_index_size(index));
 		fprintf(stream, "    "
 			"density     = %-8.4f // bytes per value's bit\n",
 			(float) (total_mem_other + total_mem_pages) /
@@ -446,7 +446,7 @@ void bitmap_index_dump(struct bitmap_index *index,
 		fprintf(stream, "    "
 			"density     = %-8.4f // bytes per value\n",
 			(float) (total_mem_other + total_mem_pages) /
-			bitmap_index_size(index));
+			bitset_index_size(index));
 
 	} else {
 		fprintf(stream, "    " "bit_per_val = undefined\n");
@@ -455,13 +455,13 @@ void bitmap_index_dump(struct bitmap_index *index,
 	}
 
 	if (verbose > 0) {
-		for (size_t b = 0; b < index->bitmaps_size; b++) {
-			if (index->bitmaps[b] == NULL) {
+		for (size_t b = 0; b < index->bitsets_size; b++) {
+			if (index->bitsets[b] == NULL) {
 				continue;
 			}
 
 			fprintf(stream, "Bitmap #%-6zu dump\n", b);
-			bitmap_dump(index->bitmaps[b], verbose, stream);
+			bitset_dump(index->bitsets[b], verbose, stream);
 		}
 	}
 	fprintf(stream, "}\n");

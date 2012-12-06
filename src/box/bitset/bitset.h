@@ -1,5 +1,5 @@
-#ifndef BITMAP_BITMAP_H_INCLUDED
-#define BITMAP_BITMAP_H_INCLUDED
+#ifndef BITSET_BITSET_H_INCLUDED
+#define BITSET_BITSET_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -32,9 +32,9 @@
 
 /**
  * @file
- * @brief Module to work with arrays of bits (bitmaps)
+ * @brief Module to work with arrays of bits (bitsets)
  *
- * Bitmap is an array of bits where each bit can be set or unset independently.
+ * Bitset is an array of bits where each bit can be set or unset independently.
  * It supports special compression scheme in order to save memory.
  * You can use any values in range [0,SIZE_MAX) without worrying about resizing.
  *
@@ -43,47 +43,47 @@
 
 #include <util.h>
 
-struct bitmap;
+struct bitset;
 
 /**
- * @brief Allocates and construct new bitmap and sets value of *pbitmap.
- * @param pbitmap
+ * @brief Allocates and construct new bitset and sets value of *pbitset.
+ * @param pbitset
  */
-int bitmap_new(struct bitmap **pbitmap);
+int bitset_new(struct bitset **pbitset);
 
 /**
- * @brief Destruct and deallocates bitmaps and sets *pbitmap to NULL.
- * @param pbitmap
+ * @brief Destruct and deallocates bitsets and sets *pbitset to NULL.
+ * @param pbitset
  */
-void bitmap_free(struct bitmap **pbitmap);
+void bitset_free(struct bitset **pbitset);
 
 /**
- * @brief Gets a bit from the bitmap
- * @param bitmap object
+ * @brief Gets a bit from the bitset
+ * @param bitset object
  * @param pos position (index)
  * @return bit value
  */
-bool bitmap_get(struct bitmap *bitmap, size_t pos);
+bool bitset_get(struct bitset *bitset, size_t pos);
 
 /**
- * @brief Sets a bit in the bitmap
- * @param bitmap object
+ * @brief Sets a bit in the bitset
+ * @param bitset object
  * @param pos position (index)
  * @return 0 on success and -1 on error
  */
-int bitmap_set(struct bitmap *bitmap, size_t pos, bool val);
+int bitset_set(struct bitset *bitset, size_t pos, bool val);
 
 
 /**
- * @brief Returns the number of bits set to true in this bitmap.
- * @param bitmap object
- * @return returns the number of bits set to true in this bitmap.
+ * @brief Returns the number of bits set to true in this bitset.
+ * @param bitset object
+ * @return returns the number of bits set to true in this bitset.
  */
-size_t bitmap_cardinality(struct bitmap *bitmap);
+size_t bitset_cardinality(struct bitset *bitset);
 
 
 #if defined(DEBUG)
-struct bitmap_stat {
+struct bitset_stat {
 	bool have_avx:1;
 	bool have_sse2:1;
 	bool have_ctz:1;
@@ -99,8 +99,8 @@ struct bitmap_stat {
 };
 
 #include <stdio.h>
-void bitmap_stat(struct bitmap *bitmap, struct bitmap_stat *stat);
-void bitmap_dump(struct bitmap *bitmap, int verbose, FILE *stream);
+void bitset_stat(struct bitset *bitset, struct bitset_stat *stat);
+void bitset_dump(struct bitset *bitset, int verbose, FILE *stream);
 #endif
 
-#endif // BITMAP_BITMAP_H_INCLUDED
+#endif // BITSET_BITSET_H_INCLUDED

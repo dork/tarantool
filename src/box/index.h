@@ -44,7 +44,7 @@ struct index;
 enum field_data_type { UNKNOWN = -1, NUM = 0, NUM64, STRING, field_data_type_MAX };
 extern const char *field_data_type_strs[];
 
-enum index_type { HASH, TREE, BITMAP, index_type_MAX };
+enum index_type { HASH, TREE, BITSET, index_type_MAX };
 extern const char *index_type_strs[];
 
 /**

@@ -30,48 +30,48 @@
 #include "iterator.h"
 
 
-#include "bitmap.h"
-#include "bitmap_p.h"
+#include "bitset.h"
+#include "bitset_p.h"
 #include "expr_p.h"
 
 /**
  * BitmapIterator definition
  */
 
-/* like bitmap_expr */
-struct bitmap_itstate {
+/* like bitset_expr */
+struct bitset_itstate {
 	/** groups */
-	struct bitmap_itstate_group **groups;
+	struct bitset_itstate_group **groups;
 	/** number of active groups in the expr */
 	size_t groups_capacity;
 };
 
-struct bitmap_itstate_group {
+struct bitset_itstate_group {
 	/** number of allocated elements in the state */
 	size_t elements_capacity;
-	struct bitmap_iterator_state_element {
-		struct bitmap_page *page;
+	struct bitset_iterator_state_element {
+		struct bitset_page *page;
 		size_t offset;
 	} elements[];
 };
 
-struct bitmap_iterator {
-	struct bitmap_expr *expr;
-	struct bitmap_itstate state;
+struct bitset_iterator {
+	struct bitset_expr *expr;
+	struct bitset_itstate state;
 
 	size_t cur_pos;
-	int indexes[BITMAP_WORD_BIT + 1]; /* used for word_index */
+	int indexes[BITSET_WORD_BIT + 1]; /* used for word_index */
 	int indexes_pos;
 };
 
 static int
-itstate_reserve(struct bitmap_itstate *itstate, size_t capacity)
+itstate_reserve(struct bitset_itstate *itstate, size_t capacity)
 {
 	if (itstate->groups_capacity >= capacity) {
 		return 0;
 	}
 
-	struct bitmap_itstate_group **groups =
+	struct bitset_itstate_group **groups =
 		realloc(itstate->groups, capacity * sizeof(*itstate->groups));
 
 	if (groups == NULL) {
@@ -80,7 +80,7 @@ itstate_reserve(struct bitmap_itstate *itstate, size_t capacity)
 
 	itstate->groups = groups;
 	for (size_t g = itstate->groups_capacity; g < capacity; g++) {
-		struct bitmap_itstate_group *group;
+		struct bitset_itstate_group *group;
 		size_t size = sizeof(*group) +
 			sizeof(*(group->elements)) * EXPR_GROUP_DEFAULT_CAPACITY;
 		group = calloc(1, size);
@@ -96,12 +96,12 @@ itstate_reserve(struct bitmap_itstate *itstate, size_t capacity)
 }
 
 static int
-itstate_reserve_group(struct bitmap_itstate *itstate,
+itstate_reserve_group(struct bitset_itstate *itstate,
 		      size_t group_id, size_t capacity)
 {
 	assert(itstate->groups_capacity > group_id);
 
-	struct bitmap_itstate_group *orig_group = itstate->groups[group_id];
+	struct bitset_itstate_group *orig_group = itstate->groups[group_id];
 
 	if (orig_group->elements_capacity >= capacity) {
 		return 0;
@@ -112,7 +112,7 @@ itstate_reserve_group(struct bitmap_itstate *itstate,
 		capacity2 *= 2;
 	}
 
-	struct bitmap_itstate_group *new_group;
+	struct bitset_itstate_group *new_group;
 	size_t size = sizeof(*new_group) +
 		sizeof(*new_group->elements) * capacity2;
 	new_group = calloc(1, size);
@@ -133,20 +133,20 @@ itstate_reserve_group(struct bitmap_itstate *itstate,
 
 
 static
-int next_word(struct bitmap_iterator *it);
+int next_word(struct bitset_iterator *it);
 static
-int next_word_in_group(struct bitmap_expr_group *group,
-		       struct bitmap_itstate_group *state,
-		       size_t *cur_pos, bitmap_word_t *pword);
+int next_word_in_group(struct bitset_expr_group *group,
+		       struct bitset_itstate_group *state,
+		       size_t *cur_pos, bitset_word_t *pword);
 static
-void next_word_in_bitmap(struct bitmap *bitmap,
-			 struct bitmap_page **ppage, size_t *poffset,
-			 int bitmap_ops, bitmap_word_t *word);
+void next_word_in_bitset(struct bitset *bitset,
+			 struct bitset_page **ppage, size_t *poffset,
+			 int bitset_ops, bitset_word_t *word);
 
-int bitmap_iterator_new(struct bitmap_iterator **pit)
+int bitset_iterator_new(struct bitset_iterator **pit)
 {
 	int rc = -1;
-	struct bitmap_iterator *it = calloc(1, sizeof(struct bitmap_iterator));
+	struct bitset_iterator *it = calloc(1, sizeof(struct bitset_iterator));
 	if (it == NULL) {
 		goto error_0;
 	}
@@ -160,7 +160,7 @@ int bitmap_iterator_new(struct bitmap_iterator **pit)
 	it->state.groups_capacity = EXPR_DEFAULT_CAPACITY;
 
 	for (size_t g = 0; g < EXPR_DEFAULT_CAPACITY; g++) {
-		struct bitmap_itstate_group *group;
+		struct bitset_itstate_group *group;
 		/* allocate memory for structure with flexible array */
 		size_t size = sizeof(*group) +
 			sizeof(*(group->elements)) * EXPR_GROUP_DEFAULT_CAPACITY;
@@ -192,31 +192,31 @@ error_0:
 
 #if !defined(NDEBUG)
 static inline
-void check_expr(struct bitmap_expr *expr)
+void check_expr(struct bitset_expr *expr)
 {
 	/* sanity checks */
 	for (size_t g = 0; g < expr->groups_size; g++) {
 		assert(expr->groups[g] != NULL);
-		assert(expr->groups[g]->reduce_op == BITMAP_OP_AND ||
-		       expr->groups[g]->reduce_op == BITMAP_OP_OR  ||
-		       expr->groups[g]->reduce_op == BITMAP_OP_XOR);
+		assert(expr->groups[g]->reduce_op == BITSET_OP_AND ||
+		       expr->groups[g]->reduce_op == BITSET_OP_OR  ||
+		       expr->groups[g]->reduce_op == BITSET_OP_XOR);
 
-		assert(expr->groups[g]->post_op == BITMAP_OP_NULL);
+		assert(expr->groups[g]->post_op == BITSET_OP_NULL);
 		/* TODO(roman): support for OP_NOT post_op */
 	}
 	for (size_t g = 0; g < expr->groups_size; g++) {
-		struct bitmap_expr_group *group = expr->groups[g];
+		struct bitset_expr_group *group = expr->groups[g];
 		for (size_t b = 0; b < group->elements_size; b++) {
-			assert(group->elements[b].bitmap != NULL);
-			assert(group->elements[b].pre_op == BITMAP_OP_NULL ||
-			       group->elements[b].pre_op == BITMAP_OP_NOT);
+			assert(group->elements[b].bitset != NULL);
+			assert(group->elements[b].pre_op == BITSET_OP_NULL ||
+			       group->elements[b].pre_op == BITSET_OP_NOT);
 		}
 	}
 }
 #endif /* !defined(DEBUG) */
 
-int bitmap_iterator_set_expr(struct bitmap_iterator *it,
-			     struct bitmap_expr *expr)
+int bitset_iterator_set_expr(struct bitset_iterator *it,
+			     struct bitset_expr *expr)
 {
 	assert(it != NULL);
 	assert(expr != NULL);
@@ -237,20 +237,20 @@ int bitmap_iterator_set_expr(struct bitmap_iterator *it,
 	}
 
 	it->expr = expr;
-	bitmap_iterator_rewind(it);
+	bitset_iterator_rewind(it);
 
 	return 0;
 }
 
-struct bitmap_expr *bitmap_iterator_get_expr(struct bitmap_iterator *it)
+struct bitset_expr *bitset_iterator_get_expr(struct bitset_iterator *it)
 {
 	assert(it != NULL);
 	return it->expr;
 }
 
-void bitmap_iterator_free(struct bitmap_iterator **pit)
+void bitset_iterator_free(struct bitset_iterator **pit)
 {
-	struct bitmap_iterator *it = *pit;
+	struct bitset_iterator *it = *pit;
 
 	if (it != NULL) {
 		for (size_t s = 0; s < it->state.groups_capacity; s++) {
@@ -265,7 +265,7 @@ void bitmap_iterator_free(struct bitmap_iterator **pit)
 }
 
 void
-bitmap_iterator_rewind(struct bitmap_iterator *it)
+bitset_iterator_rewind(struct bitset_iterator *it)
 {
 	assert(it != NULL);
 	assert(it->state.groups_capacity >= it->expr->groups_size);
@@ -276,15 +276,15 @@ bitmap_iterator_rewind(struct bitmap_iterator *it)
 	}
 
 	for (size_t g = 0; g < it->expr->groups_size; g++) {
-		struct bitmap_expr_group *group = it->expr->groups[g];
-		struct bitmap_itstate_group *state = it->state.groups[g];
+		struct bitset_expr_group *group = it->expr->groups[g];
+		struct bitset_itstate_group *state = it->state.groups[g];
 
 		for (size_t b = 0; b < group->elements_size; b++) {
-			struct bitmap *bitmap = group->elements[b].bitmap;
+			struct bitset *bitset = group->elements[b].bitset;
 			state->elements[b].offset = 0;
 			/* can be NULL, RB_MIN is an optimization */
 			state->elements[b].page =
-				RB_MIN(bitmap_pages_tree, &(bitmap->pages));
+				RB_MIN(bitset_pages_tree, &(bitset->pages));
 		}
 	}
 
@@ -293,7 +293,7 @@ bitmap_iterator_rewind(struct bitmap_iterator *it)
 	it->indexes_pos = 0;
 }
 
-size_t bitmap_iterator_next(struct bitmap_iterator *it)
+size_t bitset_iterator_next(struct bitset_iterator *it)
 {
 	assert(it->expr != NULL);
 
@@ -302,14 +302,14 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 	}
 
 	while (true) {
-		if ((it->cur_pos % BITMAP_WORD_BIT) == 0) {
+		if ((it->cur_pos % BITSET_WORD_BIT) == 0) {
 			if (next_word(it) < 0) {
 				break;
 			}
 		}
 
 		const size_t word_first_pos = it->cur_pos -
-				(it->cur_pos % BITMAP_WORD_BIT);
+				(it->cur_pos % BITSET_WORD_BIT);
 
 		if (it->indexes[it->indexes_pos] != 0) {
 			it->cur_pos = word_first_pos +
@@ -317,7 +317,7 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 			return (it->cur_pos - 1);
 		} else {
 			/* not more bits in current word */
-			it->cur_pos = word_first_pos + BITMAP_WORD_BIT;
+			it->cur_pos = word_first_pos + BITSET_WORD_BIT;
 			continue;
 		}
 	}
@@ -326,8 +326,8 @@ size_t bitmap_iterator_next(struct bitmap_iterator *it)
 }
 
 static
-int next_word(struct bitmap_iterator *it) {
-	bitmap_word_t word;
+int next_word(struct bitset_iterator *it) {
+	bitset_word_t word;
 
 	if (it->expr->groups_size == 1) {
 		/* optimization for case when only one group exist */
@@ -346,13 +346,13 @@ int next_word(struct bitmap_iterator *it) {
 	}
 
 	/*
-	 * Gets next words from each bitmap group and apply final AND reduction
+	 * Gets next words from each bitset group and apply final AND reduction
 	 */
 	word = word_set_ones();
 	while(true) {
 		size_t offset_max = it->cur_pos;
 		for (size_t s = 0; s < it->expr->groups_size; s++) {
-			bitmap_word_t tmp_word = word_set_zeros();
+			bitset_word_t tmp_word = word_set_zeros();
 
 			if (next_word_in_group(it->expr->groups[s],
 					       it->state.groups[s],
@@ -386,20 +386,20 @@ int next_word(struct bitmap_iterator *it) {
 
 
 static
-int next_word_in_group_and(struct bitmap_expr_group *group,
-			      struct bitmap_itstate_group *state,
-			      size_t *pcur_pos, bitmap_word_t *pword);
+int next_word_in_group_and(struct bitset_expr_group *group,
+			      struct bitset_itstate_group *state,
+			      size_t *pcur_pos, bitset_word_t *pword);
 static
-int next_word_in_group_or_xor(struct bitmap_expr_group *group,
-			      struct bitmap_itstate_group *state,
-			      size_t *pcur_pos, bitmap_word_t *pword);
+int next_word_in_group_or_xor(struct bitset_expr_group *group,
+			      struct bitset_itstate_group *state,
+			      size_t *pcur_pos, bitset_word_t *pword);
 
 static
-int next_word_in_group(struct bitmap_expr_group *group,
-		     struct bitmap_itstate_group *state,
-		     size_t *pcur_pos, bitmap_word_t *pword)
+int next_word_in_group(struct bitset_expr_group *group,
+		     struct bitset_itstate_group *state,
+		     size_t *pcur_pos, bitset_word_t *pword)
 {
-	*pcur_pos = *pcur_pos - (*pcur_pos % BITMAP_WORD_BIT);
+	*pcur_pos = *pcur_pos - (*pcur_pos % BITSET_WORD_BIT);
 
 	if (group->elements_size < 1) {
 		/* empty group */
@@ -409,10 +409,10 @@ int next_word_in_group(struct bitmap_expr_group *group,
 	}
 
 	switch(group->reduce_op) {
-	case BITMAP_OP_AND:
+	case BITSET_OP_AND:
 		return next_word_in_group_and(group, state, pcur_pos, pword);
-	case BITMAP_OP_OR:
-	case BITMAP_OP_XOR:
+	case BITSET_OP_OR:
+	case BITSET_OP_XOR:
 		return next_word_in_group_or_xor(group, state, pcur_pos, pword);
 	default:
 		/* not implemented */
@@ -421,15 +421,15 @@ int next_word_in_group(struct bitmap_expr_group *group,
 }
 
 static
-int next_word_in_group_and(struct bitmap_expr_group *group,
-			      struct bitmap_itstate_group *state,
-			      size_t *pcur_pos, bitmap_word_t *pword) {
-	assert(group->reduce_op == BITMAP_OP_AND);
+int next_word_in_group_and(struct bitset_expr_group *group,
+			      struct bitset_itstate_group *state,
+			      size_t *pcur_pos, bitset_word_t *pword) {
+	assert(group->reduce_op == BITSET_OP_AND);
 
 #if 0
 	/*
-	 * Try to sync all bitmaps and find first pos for that
-	 * pages && words exist in all bitmaps in this group
+	 * Try to sync all bitsets and find first pos for that
+	 * pages && words exist in all bitsets in this group
 	 */
 	size_t next_pos = *pcur_pos;
 	for(size_t b = 0; b < group->elements_size; b++) {
@@ -443,7 +443,7 @@ int next_word_in_group_and(struct bitmap_expr_group *group,
 
 #if 0
 	bool flag = false;
-	size_t page_first_pos = bitmap_page_first_pos(*pcur_pos);
+	size_t page_first_pos = bitset_page_first_pos(*pcur_pos);
 	for(size_t b = 0; b < group->elements_size; b++) {
 		if (state->elements[b].page == NULL ||
 		    state->elements[b].page->first_pos != page_first_pos) {
@@ -464,10 +464,10 @@ int next_word_in_group_and(struct bitmap_expr_group *group,
 
 		*pword = word_set_ones();
 		for(size_t b = 0; b < group->elements_size; b++) {
-			bitmap_word_t tmp_word = word_set_zeros();
+			bitset_word_t tmp_word = word_set_zeros();
 
 			state->elements[b].offset = next_pos;
-			next_word_in_bitmap(group->elements[b].bitmap,
+			next_word_in_bitset(group->elements[b].bitset,
 				  &(state->elements[b].page),
 				  &(state->elements[b].offset),
 				  group->elements[b].pre_op,
@@ -492,10 +492,10 @@ int next_word_in_group_and(struct bitmap_expr_group *group,
 #if 0
 	*pword = word_set_ones();
 	for(size_t b = 0; b < group->elements_size; b++) {
-		bitmap_word_t tmp_word = word_set_zeros();
+		bitset_word_t tmp_word = word_set_zeros();
 
 		state->elements[b].offset = next_pos;
-		next_word_in_bitmap(group->elements[b].bitmap,
+		next_word_in_bitset(group->elements[b].bitset,
 			  &(state->elements[b].page),
 			  &(state->elements[b].offset),
 			  group->elements[b].pre_op,
@@ -511,13 +511,13 @@ int next_word_in_group_and(struct bitmap_expr_group *group,
 }
 
 static
-int next_word_in_group_or_xor(struct bitmap_expr_group *group,
-			      struct bitmap_itstate_group *state,
-			      size_t *pcur_pos, bitmap_word_t *pword) {
-	assert(group->reduce_op == BITMAP_OP_OR ||
-	       group->reduce_op == BITMAP_OP_XOR);
+int next_word_in_group_or_xor(struct bitset_expr_group *group,
+			      struct bitset_itstate_group *state,
+			      size_t *pcur_pos, bitset_word_t *pword) {
+	assert(group->reduce_op == BITSET_OP_OR ||
+	       group->reduce_op == BITSET_OP_XOR);
 
-	/* get minimum position from all bitmaps */
+	/* get minimum position from all bitsets */
 	size_t next_pos = SIZE_MAX;
 	for(size_t b = 0; b < group->elements_size; b++) {
 		if (next_pos > state->elements[b].offset) {
@@ -530,11 +530,11 @@ int next_word_in_group_or_xor(struct bitmap_expr_group *group,
 	}
 
 	for(size_t b = 0; b < group->elements_size; b++) {
-		bitmap_word_t tmp_word = word_set_zeros();
+		bitset_word_t tmp_word = word_set_zeros();
 
 		if (state->elements[b].offset <= *pcur_pos) {
 			state->elements[b].offset = *pcur_pos;
-			next_word_in_bitmap(group->elements[b].bitmap,
+			next_word_in_bitset(group->elements[b].bitset,
 				  &(state->elements[b].page),
 				  &(state->elements[b].offset),
 				  group->elements[b].pre_op,
@@ -558,10 +558,10 @@ int next_word_in_group_or_xor(struct bitmap_expr_group *group,
 
 	*pword = word_set_zeros();
 	for(size_t b = 0; b < group->elements_size; b++) {
-		bitmap_word_t tmp_word = word_set_zeros();
+		bitset_word_t tmp_word = word_set_zeros();
 
 		if (state->elements[b].offset == *pcur_pos) {
-			next_word_in_bitmap(group->elements[b].bitmap,
+			next_word_in_bitset(group->elements[b].bitset,
 				  &(state->elements[b].page),
 				  &(state->elements[b].offset),
 				  group->elements[b].pre_op,
@@ -571,9 +571,9 @@ int next_word_in_group_or_xor(struct bitmap_expr_group *group,
 			tmp_word = word_set_zeros();
 		}
 
-		if (group->reduce_op == BITMAP_OP_OR) {
+		if (group->reduce_op == BITSET_OP_OR) {
 			*pword = word_or(*pword, tmp_word);
-		} else /* BITMAP_OP_XOR */ {
+		} else /* BITSET_OP_XOR */ {
 			*pword = word_xor(*pword, tmp_word);
 		}
 	}
@@ -584,12 +584,12 @@ int next_word_in_group_or_xor(struct bitmap_expr_group *group,
 #define USE_FINDFROM 1
 #ifdef USE_FINDFROM
 static
-struct bitmap_page *bitmap_pages_tree_RB_FIND_FROM(
-		struct bitmap_page *page,
-		struct bitmap_page *key) {
+struct bitset_page *bitset_pages_tree_RB_FIND_FROM(
+		struct bitset_page *page,
+		struct bitset_page *key) {
 	/* at next time try to lookup starting from current node */
 	while ((page != NULL) && (page->first_pos < key->first_pos)) {
-		page =  bitmap_pages_tree_RB_NEXT(page);
+		page =  bitset_pages_tree_RB_NEXT(page);
 	}
 
 	return page;
@@ -597,35 +597,35 @@ struct bitmap_page *bitmap_pages_tree_RB_FIND_FROM(
 #endif
 
 static
-void next_word_in_bitmap(struct bitmap *bitmap,
-			 struct bitmap_page **ppage, size_t *poffset,
-			 int bitmap_ops, bitmap_word_t *word) {
+void next_word_in_bitset(struct bitset *bitset,
+			 struct bitset_page **ppage, size_t *poffset,
+			 int bitset_ops, bitset_word_t *word) {
 
-	struct bitmap_page key;
-	key.first_pos = bitmap_page_first_pos(*poffset);
+	struct bitset_page key;
+	key.first_pos = bitset_page_first_pos(*poffset);
 
-	struct bitmap_page *page = *ppage;
+	struct bitset_page *page = *ppage;
 	if (page == NULL) {
 		/* at first time perform full tree lookup */
-		page = RB_NFIND(bitmap_pages_tree,
-				&(bitmap->pages), &key);
+		page = RB_NFIND(bitset_pages_tree,
+				&(bitset->pages), &key);
 	} else {
 #ifndef USE_FINDFROM
 		if (page->first_pos != key.first_pos) {
-			page = RB_NFIND(bitmap_pages_tree,
-					&(bitmap->pages), &key);
+			page = RB_NFIND(bitset_pages_tree,
+					&(bitset->pages), &key);
 		}
 #else
-		page = bitmap_pages_tree_RB_FIND_FROM(page, &key);
+		page = bitset_pages_tree_RB_FIND_FROM(page, &key);
 #endif /* USE_FINDFROM */
 	}
 
 	if (page == NULL) {
 		/*
-		 * No more data in the bitmap
+		 * No more data in the bitset
 		 */
 
-		if (bitmap_ops == BITMAP_OP_NOT) {
+		if (bitset_ops == BITSET_OP_NOT) {
 			/* no more words - return all ones */
 			*word = word_set_ones();
 		} else {
@@ -644,8 +644,8 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 		 * Word with requested offset has been found
 		 */
 
-		size_t w = (*poffset - page->first_pos) / BITMAP_WORD_BIT;
-		if (bitmap_ops == BITMAP_OP_NOT) {
+		size_t w = (*poffset - page->first_pos) / BITSET_WORD_BIT;
+		if (bitset_ops == BITSET_OP_NOT) {
 			*word = word_not(page->words[w]);
 		} else {
 			*word = page->words[w];
@@ -659,7 +659,7 @@ void next_word_in_bitmap(struct bitmap *bitmap,
 
 	assert(page->first_pos > key.first_pos);
 
-	if (bitmap_ops == BITMAP_OP_NOT) {
+	if (bitset_ops == BITSET_OP_NOT) {
 		/*
 		 * Return word_set_ones() until offset < page->first_pos.
 		 * Offset && page must not be changed!

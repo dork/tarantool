@@ -35,10 +35,10 @@
 const size_t EXPR_DEFAULT_CAPACITY = 2;
 const size_t EXPR_GROUP_DEFAULT_CAPACITY = 32;
 
-struct bitmap_expr *
-bitmap_expr_new()
+struct bitset_expr *
+bitset_expr_new()
 {
-	struct bitmap_expr *expr = calloc(1, sizeof(*expr));
+	struct bitset_expr *expr = calloc(1, sizeof(*expr));
 	if (expr == NULL) {
 		goto error_0;
 	}
@@ -51,7 +51,7 @@ bitmap_expr_new()
 	expr->groups_capacity = EXPR_DEFAULT_CAPACITY;
 
 	for (size_t g = 0; g < EXPR_DEFAULT_CAPACITY; g++) {
-		struct bitmap_expr_group *group;
+		struct bitset_expr_group *group;
 		/* allocate memory for structure with flexible array */
 		size_t size = sizeof(*group) +
 			sizeof(*(group->elements)) * EXPR_GROUP_DEFAULT_CAPACITY;
@@ -61,12 +61,12 @@ bitmap_expr_new()
 		}
 
 		group->elements_capacity = EXPR_GROUP_DEFAULT_CAPACITY;
-		group->post_op = BITMAP_OP_NULL;
-		group->reduce_op = BITMAP_OP_OR;
+		group->post_op = BITSET_OP_NULL;
+		group->reduce_op = BITSET_OP_OR;
 		expr->groups[g] = group;
 	}
 
-	bitmap_expr_clear(expr);
+	bitset_expr_clear(expr);
 
 	return expr;
 error_2:
@@ -83,7 +83,7 @@ error_0:
 }
 
 void
-bitmap_expr_free(struct bitmap_expr *expr)
+bitset_expr_free(struct bitset_expr *expr)
 {
 	if (expr == NULL) {
 		return;
@@ -98,7 +98,7 @@ bitmap_expr_free(struct bitmap_expr *expr)
 }
 
 void
-bitmap_expr_clear(struct bitmap_expr *expr)
+bitset_expr_clear(struct bitset_expr *expr)
 {
 	assert(expr != NULL);
 	for (size_t g = 0; g < expr->groups_capacity; g++) {
@@ -109,13 +109,13 @@ bitmap_expr_clear(struct bitmap_expr *expr)
 }
 
 static int
-expr_reserve(struct bitmap_expr *expr, size_t capacity)
+expr_reserve(struct bitset_expr *expr, size_t capacity)
 {
 	if (expr->groups_capacity >= capacity) {
 		return 0;
 	}
 
-	struct bitmap_expr_group **groups =
+	struct bitset_expr_group **groups =
 		realloc(expr->groups, capacity * sizeof(*expr->groups));
 
 	if (groups == NULL) {
@@ -124,7 +124,7 @@ expr_reserve(struct bitmap_expr *expr, size_t capacity)
 
 	expr->groups = groups;
 	for (size_t g = expr->groups_capacity; g < capacity; g++) {
-		struct bitmap_expr_group *group;
+		struct bitset_expr_group *group;
 		size_t size = sizeof(*group) +
 			sizeof(*(group->elements)) * EXPR_GROUP_DEFAULT_CAPACITY;
 		group = calloc(1, size);
@@ -139,11 +139,11 @@ expr_reserve(struct bitmap_expr *expr, size_t capacity)
 }
 
 static int
-expr_reserve_group(struct bitmap_expr *expr, size_t group_id, size_t capacity)
+expr_reserve_group(struct bitset_expr *expr, size_t group_id, size_t capacity)
 {
 	assert(expr->groups_capacity > group_id);
 
-	struct bitmap_expr_group *orig_group = expr->groups[group_id];
+	struct bitset_expr_group *orig_group = expr->groups[group_id];
 
 	if (orig_group->elements_capacity >= capacity) {
 		return 0;
@@ -154,7 +154,7 @@ expr_reserve_group(struct bitmap_expr *expr, size_t group_id, size_t capacity)
 		capacity2 *= 2;
 	}
 
-	struct bitmap_expr_group *new_group;
+	struct bitset_expr_group *new_group;
 	size_t size = sizeof(*new_group) +
 		sizeof(*new_group->elements) * capacity2;
 	new_group = calloc(1, size);
@@ -176,9 +176,9 @@ expr_reserve_group(struct bitmap_expr *expr, size_t group_id, size_t capacity)
 }
 
 int
-bitmap_expr_add_group(struct bitmap_expr *expr,
-		      enum bitmap_binary_op reduce_op,
-		      enum bitmap_unary_op post_op)
+bitset_expr_add_group(struct bitset_expr *expr,
+		      enum bitset_binary_op reduce_op,
+		      enum bitset_unary_op post_op)
 {
 	assert(expr != NULL);
 
@@ -196,35 +196,35 @@ bitmap_expr_add_group(struct bitmap_expr *expr,
 }
 
 size_t
-bitmap_expr_size(struct bitmap_expr *expr)
+bitset_expr_size(struct bitset_expr *expr)
 {
 	return expr->groups_size;
 }
 
 int
-bitmap_expr_group_add_bitmap(struct bitmap_expr *expr,
+bitset_expr_group_add_bitset(struct bitset_expr *expr,
 			     size_t group_id,
-			     struct bitmap *bitmap,
-			     enum bitmap_unary_op pre_op)
+			     struct bitset *bitset,
+			     enum bitset_unary_op pre_op)
 {
 	assert(expr != NULL);
 	assert(expr->groups_size > group_id);
-	assert(bitmap != NULL);
+	assert(bitset != NULL);
 
-	const size_t bitmap_id = expr->groups[group_id]->elements_size;
-	if (expr_reserve_group(expr, group_id, bitmap_id + 1) != 0) {
+	const size_t bitset_id = expr->groups[group_id]->elements_size;
+	if (expr_reserve_group(expr, group_id, bitset_id + 1) != 0) {
 		return -1;
 	}
 
-	expr->groups[group_id]->elements[bitmap_id].bitmap = bitmap;
-	expr->groups[group_id]->elements[bitmap_id].pre_op = pre_op;
+	expr->groups[group_id]->elements[bitset_id].bitset = bitset;
+	expr->groups[group_id]->elements[bitset_id].pre_op = pre_op;
 	expr->groups[group_id]->elements_size++;
 
 	return 0;
 }
 
 void
-bitmap_expr_group_clear(struct bitmap_expr *expr,
+bitset_expr_group_clear(struct bitset_expr *expr,
 			size_t group_id)
 {
 	assert(expr != NULL);
@@ -233,7 +233,7 @@ bitmap_expr_group_clear(struct bitmap_expr *expr,
 }
 
 size_t
-bitmap_expr_group_size(struct bitmap_expr *expr,
+bitset_expr_group_size(struct bitset_expr *expr,
 		       size_t group_id)
 {
 	assert(expr != NULL);

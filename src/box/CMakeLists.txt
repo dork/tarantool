@@ -28,7 +28,7 @@ set_property(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${lua_sources})
 
 tarantool_module("box" tuple.m index.m tree.m space.m port.m request.m
     txn.m box.m ${lua_sources} box_lua.m box_lua_space.m
-    index_bitmap.h index_bitmap.m)
+    index_bitset.h index_bitset.m)
 
-add_subdirectory(bitmap)
-target_link_libraries(tarantool_box bitmap)
+add_subdirectory(bitset)
+target_link_libraries(tarantool_box bitset)

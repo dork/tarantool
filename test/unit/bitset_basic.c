@@ -3,8 +3,8 @@
 #include <stdbool.h>
 #include <time.h>
 
-#include "src/box/bitmap/bitmap.h"
-#include "src/box/bitmap/index.h"
+#include "src/box/bitset/bitset.h"
+#include "src/box/bitset/index.h"
 #include "unit.h"
 
 static
@@ -12,43 +12,43 @@ void test_cardinality()
 {
 	header();
 
-	struct bitmap *bm;
-	bitmap_new(&bm);
+	struct bitset *bm;
+	bitset_new(&bm);
 
-	fail_unless(bitmap_cardinality(bm) == 0);
+	fail_unless(bitset_cardinality(bm) == 0);
 
 	size_t cnt = 0;
-	bitmap_set(bm, 10, 1);
+	bitset_set(bm, 10, 1);
 	cnt++;
-	bitmap_set(bm, 15, 1);
+	bitset_set(bm, 15, 1);
 	cnt++;
-	bitmap_set(bm, 20, 1);
+	bitset_set(bm, 20, 1);
 	cnt++;
 
-	fail_unless(bitmap_cardinality(bm) == cnt);
+	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitmap_set(bm, 10, 1);
-	fail_unless(bitmap_cardinality(bm) == cnt);
+	bitset_set(bm, 10, 1);
+	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitmap_set(bm, 20, 0);
+	bitset_set(bm, 20, 0);
 	cnt--;
-	fail_unless(bitmap_cardinality(bm) == cnt);
+	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitmap_set(bm, 20, 0);
-	fail_unless(bitmap_cardinality(bm) == cnt);
+	bitset_set(bm, 20, 0);
+	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitmap_set(bm, 666, 0);
-	fail_unless(bitmap_cardinality(bm) == cnt);
+	bitset_set(bm, 666, 0);
+	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitmap_set(bm, 10, 0);
+	bitset_set(bm, 10, 0);
 	cnt--;
-	fail_unless(bitmap_cardinality(bm) == cnt);
+	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitmap_set(bm, 15, 0);
+	bitset_set(bm, 15, 0);
 	cnt--;
-	fail_unless(bitmap_cardinality(bm) == cnt);
+	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitmap_free(&bm);
+	bitset_free(&bm);
 
 	footer();
 }
@@ -88,8 +88,8 @@ void test_get_set()
 {
 	header();
 
-	struct bitmap *bm;
-	bitmap_new(&bm);
+	struct bitset *bm;
+	bitset_new(&bm);
 
 	const size_t NUM_SIZE = (size_t) 1 << 14;
 	size_t *nums = malloc(NUM_SIZE * sizeof(size_t));
@@ -102,14 +102,14 @@ void test_get_set()
 
 	printf("Settings bits... ");
 	for(size_t i = 0; i < NUM_SIZE; i++) {
-		bitmap_set(bm, nums[i], 1);
+		bitset_set(bm, nums[i], 1);
 	}
 	printf("ok\n");
 
 	printf("Checking bits... ");
 	shuffle(nums, NUM_SIZE);
 	for(size_t i = 0; i < NUM_SIZE; i++) {
-		fail_unless(bitmap_get(bm, nums[i]));
+		fail_unless(bitset_get(bm, nums[i]));
 	}
 	printf("ok\n");
 
@@ -117,8 +117,8 @@ void test_get_set()
 	shuffle(nums, NUM_SIZE);
 	for(size_t i = 0; i < NUM_SIZE; i++) {
 		if (rand() % 5 == 0) {
-			bitmap_set(bm, nums[i], 0);
-			fail_if(bitmap_get(bm, nums[i]));
+			bitset_set(bm, nums[i], 0);
+			fail_if(bitset_get(bm, nums[i]));
 			nums[i] = SIZE_MAX;
 		}
 	}
@@ -131,7 +131,7 @@ void test_get_set()
 			continue;
 		}
 
-		fail_unless(bitmap_get(bm, nums[i]));
+		fail_unless(bitset_get(bm, nums[i]));
 	}
 	printf("ok\n");
 
@@ -147,10 +147,10 @@ void test_get_set()
 
 	for(size_t i = 0; i < i_max; i++) {
 		if (*pn < SIZE_MAX && *pn == i) {
-			fail_unless(bitmap_get(bm, *pn));
+			fail_unless(bitset_get(bm, *pn));
 			pn++;
 		} else {
-			fail_if(bitmap_get(bm, i));
+			fail_if(bitset_get(bm, i));
 		}
 	}
 	printf("ok\n");
@@ -163,18 +163,18 @@ void test_get_set()
 			continue;
 		}
 
-		bitmap_set(bm, nums[i], 0);
+		bitset_set(bm, nums[i], 0);
 	}
 	printf("ok\n");
 
 
 	printf("Checking all bits... ");
 	for(size_t i = 0; i < i_max; i++) {
-		fail_if(bitmap_get(bm, i));
+		fail_if(bitset_get(bm, i));
 	}
 	printf("ok\n");
 
-	bitmap_free(&bm);
+	bitset_free(&bm);
 
 	footer();
 }

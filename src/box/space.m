@@ -218,8 +218,8 @@ key_init(struct key_def *def, struct tarantool_cfg_space_index *cfg_index)
 		def->type = HASH;
 	else if (strcmp(cfg_index->type, "TREE") == 0)
 		def->type = TREE;
-	else if (strcmp(cfg_index->type, "BITMAP") == 0)
-		def->type = BITMAP;
+	else if (strcmp(cfg_index->type, "BITSET") == 0)
+		def->type = BITSET;
 	else
 		panic("Wrong index type: %s", cfg_index->type);
 
@@ -573,18 +573,18 @@ check_spaces(struct tarantool_cfg *conf)
 			case TREE:
 				/* extra check for tree index not needed */
 				break;
-			case BITMAP:
-				/* check bitmap index */
-				/* bitmap index must has single-field key */
+			case BITSET:
+				/* check bitset index */
+				/* bitset index must has single-field key */
 				if (key_part_count != 1) {
 					out_warning(0, "(space = %zu index = %zu) "
-						    "bitmap index must has a single-field key", i, j);
+						    "bitset index must has a single-field key", i, j);
 					return -1;
 				}
-				/* bitmap index must not be unique */
+				/* bitset index must not be unique */
 				if (index->unique) {
 					out_warning(0, "(space = %zu index = %zu) "
-						    "bitmap index must be non-unique", i, j);
+						    "bitset index must be non-unique", i, j);
 					return -1;
 				}
 				break;

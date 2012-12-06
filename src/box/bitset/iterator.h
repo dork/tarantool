@@ -1,5 +1,5 @@
-#ifndef BITMAP_ITERATOR_H_INCLUDED
-#define BITMAP_ITERATOR_H_INCLUDED
+#ifndef BITSET_ITERATOR_H_INCLUDED
+#define BITSET_ITERATOR_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -32,40 +32,40 @@
 
 /**
  * @file
- * @brief Iterator for bitmap objects.
+ * @brief Iterator for bitset objects.
  *
- * The iterator can apply logical operations on bitmaps on the fly, without
- * producing temporary bitmaps.
+ * The iterator can apply logical operations on bitsets on the fly, without
+ * producing temporary bitsets.
  * @see expr.h
  * @author Roman Tsisyk
  */
 
 #include <util.h>
 
-#include "bitmap.h"
+#include "bitset.h"
 #include "expr.h"
 
 /**
- * BitmapIterator object
- * Iterator can be used for iterating over bits in a bitmap of group of bitmaps.
+ * BitsetIterator object
+ * Iterator can be used for iterating over bits in a bitset of group of bitsets.
  */
-struct bitmap_iterator;
+struct bitset_iterator;
 
 /**
  * @brief Allocates new iterator
  * After creation the iterator must be initialed using
- * @a bitmap_iterator_set_expr method.
+ * @a bitset_iterator_set_expr method.
  * @param pit pointer to object
  * @return zero on success and non-zero otherwise
  */
-int bitmap_iterator_new(struct bitmap_iterator **pit);
+int bitset_iterator_new(struct bitset_iterator **pit);
 
 /**
  * @brief Destroys thee iterator
  * @param pit pointer to object
- * @see bitmap_iterator_new
+ * @see bitset_iterator_new
  */
-void bitmap_iterator_free(struct bitmap_iterator **pit);
+void bitset_iterator_free(struct bitset_iterator **pit);
 
 /**
  * @brief Initializer interator from the @a expr.
@@ -81,33 +81,33 @@ void bitmap_iterator_free(struct bitmap_iterator **pit);
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitmap_iterator_set_expr(struct bitmap_iterator *it,
-			     struct bitmap_expr *expr);
+int bitset_iterator_set_expr(struct bitset_iterator *it,
+			     struct bitset_expr *expr);
 
 /**
  * @brief Returns a pointer to current iterator expression
  * @param it object
  * @return A pointer to current iterator expression
  * @note Expression must not be changed if the iterator is active.
- * @see bitmap_iterator_set_expr
+ * @see bitset_iterator_set_expr
  */
-struct bitmap_expr *
-bitmap_iterator_get_expr(struct bitmap_iterator *it);
+struct bitset_expr *
+bitset_iterator_get_expr(struct bitset_iterator *it);
 
 /**
  * @brief Rewinds the iterator to the start position.
  * @param it object
- * @see bitmap_iterator_set_expr
+ * @see bitset_iterator_set_expr
  */
-void bitmap_iterator_rewind(struct bitmap_iterator *it);
+void bitset_iterator_rewind(struct bitset_iterator *it);
 
 /**
  * @brief Moves iterator to next position.
- * @see bitmap_iterator_set_expr
+ * @see bitset_iterator_set_expr
  * @param it object
  * @return offset where next bit is set or SIZE_MAX if no more bits
  */
-size_t bitmap_iterator_next(struct bitmap_iterator *it);
+size_t bitset_iterator_next(struct bitset_iterator *it);
 
 
-#endif /* BITMAP_ITERATOR_H_INCLUDED */
+#endif /* BITSET_ITERATOR_H_INCLUDED */

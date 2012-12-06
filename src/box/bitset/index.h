@@ -1,5 +1,5 @@
-#ifndef BITMAP_INDEX_H_INCLUDED
-#define BITMAP_INDEX_H_INCLUDED
+#ifndef BITSET_INDEX_H_INCLUDED
+#define BITSET_INDEX_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -33,30 +33,30 @@
 /**
  * @file
  * @brief Bit index.
- * @see bitmap.h
+ * @see bitset.h
  * @author Roman Tsisyk
  */
 
 #include <util.h>
 
-#include "bitmap.h"
+#include "bitset.h"
 #include "iterator.h"
 
-struct bitmap_index;
+struct bitset_index;
 
 /**
  * @brief Creates new index object
  * @param pindex
- * @param initial_size initial number of used bitmaps
+ * @param initial_size initial number of used bitsets
  * @return zero on success and non-zero otherwise
  */
-int bitmap_index_new(struct bitmap_index **pindex, size_t initial_size);
+int bitset_index_new(struct bitset_index **pindex, size_t initial_size);
 
 /**
  * @brief Destroys index object
  * @param pindex
  */
-void bitmap_index_free(struct bitmap_index **pindex);
+void bitset_index_free(struct bitset_index **pindex);
 
 /**
  * @brief Inserts (key, value) pair into the index.
@@ -66,7 +66,7 @@ void bitmap_index_free(struct bitmap_index **pindex);
  * @param value value
  * @return zero on success and non-zero otherwise
  */
-int bitmap_index_insert(struct bitmap_index *index,
+int bitset_index_insert(struct bitset_index *index,
 			void *key, size_t key_size,
 			size_t value);
 
@@ -78,14 +78,14 @@ int bitmap_index_insert(struct bitmap_index *index,
  * @param value value
  * @return zero on success and non-zero otherwise
  */
-int bitmap_index_remove(struct bitmap_index *index,
+int bitset_index_remove(struct bitset_index *index,
 			void *key, size_t key_size,
 			size_t value);
 
 /**
  * @brief Equals iteration. Matches all pairs in the index, where
  * @a key exacttly equals pair.key ((@a key == pair.key).
- * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * Initialized @a expr can be used with @a bitset_iterator_init function.
  * @param index
  * @param expr expression
  * @param key key
@@ -93,15 +93,15 @@ int bitmap_index_remove(struct bitmap_index *index,
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitmap_index_iterate_equals(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_equals(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size);
 
 /**
  * @brief All-Bits-Set iteration. Matches all pairs in the index, where
  * all bits from @a key is set in pair.key ((@a key & pair.key) != @a key).
- * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * Initialized @a expr can be used with @a bitset_iterator_init function.
  * @param index
  * @param expr expression
  * @param key key
@@ -109,15 +109,15 @@ int bitmap_index_iterate_equals(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitmap_index_iterate_all_set(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_all_set(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size);
 
 /**
  * @brief All-Bits-Not-Set iteration. Matches all pairs in the index, where
  * all bits from @a key is not set in pair.key ((@a key & pair.key) != @a key).
- * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * Initialized @a expr can be used with @a bitset_iterator_init function.
  * @param index
  * @param expr expression
  * @param key key
@@ -125,15 +125,15 @@ int bitmap_index_iterate_all_set(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitmap_index_iterate_all_not_set(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_all_not_set(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size);
 
 /**
  * @brief Any-Bits-Set iteration. Matches all pairs in the index, where
  * at least on bit from @a key is set in pair.key ((@a key & pair.key) != 0).
- * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * Initialized @a expr can be used with @a bitset_iterator_init function.
  * @param index object
  * @param expr expression
  * @param key key
@@ -141,16 +141,16 @@ int bitmap_index_iterate_all_not_set(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitmap_index_iterate_any_set(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_any_set(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size);
 
 
 /**
  * @brief Any-Bits-Not-Set iteration. Matches all pairs in the index, where
  * at least on bit from @a key is not set in pair.key ((@a key & pair.key) != 0).
- * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * Initialized @a expr can be used with @a bitset_iterator_init function.
  * @param index object
  * @param expr expression
  * @param key key
@@ -158,9 +158,9 @@ int bitmap_index_iterate_any_set(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitmap_index_iterate_any_not_set(
-			struct bitmap_index *index,
-			struct bitmap_expr *expr,
+int bitset_index_iterate_any_not_set(
+			struct bitset_index *index,
+			struct bitset_expr *expr,
 			void *key, size_t key_size);
 
 /**
@@ -169,21 +169,21 @@ int bitmap_index_iterate_any_not_set(
  * @param value
  * @return true if the index contains pair with the @a value
  */
-bool bitmap_index_contains_value(struct bitmap_index *index, size_t value);
+bool bitset_index_contains_value(struct bitset_index *index, size_t value);
 
 /**
  * @brief Returns number of pairs in the index.
  * @param index object
  * @return number of pairs in this index
  */
-size_t bitmap_index_size(struct bitmap_index *index);
+size_t bitset_index_size(struct bitset_index *index);
 
 
 #if defined(DEBUG)
-/* TODO: implement bitmap_index_stat */
-void bitmap_index_dump(struct bitmap_index *index,
+/* TODO: implement bitset_index_stat */
+void bitset_index_dump(struct bitset_index *index,
 		       int verbose, FILE *stream);
 
 #endif /* defined(DEBUG) */
 
-#endif // BITMAP_INDEX_H_INCLUDED
+#endif // BITSET_INDEX_H_INCLUDED

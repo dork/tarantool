@@ -28,7 +28,7 @@
  */
 #include "index.h"
 #include "tree.h"
-#include "index_bitmap.h"
+#include "index_bitset.h"
 #include "say.h"
 #include "tuple.h"
 #include "pickle.h"
@@ -45,7 +45,7 @@ static struct index_traits hash_index_traits = {
 };
 
 const char *field_data_type_strs[] = {"NUM", "NUM64", "STR", "\0"};
-const char *index_type_strs[] = { "HASH", "TREE", "BITMAP", "\0" };
+const char *index_type_strs[] = { "HASH", "TREE", "BITSET", "\0" };
 
 STRS(iterator_type, ITERATOR_TYPE);
 
@@ -89,7 +89,7 @@ check_key_parts(struct key_def *key_def,
 @class Hash64Index;
 @class HashStrIndex;
 @class TreeIndex;
-@class BitmapIndex;
+@class BitsetIndex;
 
 + (struct index_traits *) traits
 {
@@ -118,8 +118,8 @@ check_key_parts(struct key_def *key_def,
 		break;
 	case TREE:
 		return [TreeIndex alloc: key_def :space];
-	case BITMAP:
-		return [BitmapIndex alloc];
+	case BITSET:
+		return [BitsetIndex alloc];
 	default:
 		break;
 	}

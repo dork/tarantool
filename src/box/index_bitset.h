@@ -1,5 +1,5 @@
-#ifndef TARANTOOL_BOX_INDEX_BITMAP_H_INCLUDED
-#define TARANTOOL_BOX_INDEX_BITMAP_H_INCLUDED
+#ifndef TARANTOOL_BOX_INDEX_BITSET_H_INCLUDED
+#define TARANTOOL_BOX_INDEX_BITSET_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -31,22 +31,22 @@
  */
 
 /**
- * @brief Module implements adapter (ObjC object) for bitmap index in Tarantool
- * @see struct bitmap
- * @see struct bitmap_index
+ * @brief Module implements adapter (ObjC object) for bitset index in Tarantool
+ * @see struct bitset
+ * @see struct bitset_index
  * @author Roman Tsisyk
  */
 
 #include "index.h"
 
-struct bitmap_index;
-struct bitmap_expr;
+struct bitset_index;
+struct bitset_expr;
 
-@interface BitmapIndex: Index {
+@interface BitsetIndex: Index {
 	@private
-	struct bitmap_index *index;
-	struct bitmap_expr *position_expr;
+	struct bitset_index *index;
+	struct bitset_expr *position_expr;
 }
 @end
 
-#endif /* TARANTOOL_BOX_INDEX_BITMAP_H_INCLUDED */
+#endif /* TARANTOOL_BOX_INDEX_BITSET_H_INCLUDED */

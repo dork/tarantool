@@ -88,8 +88,8 @@ lbox_pushspace(struct lua_State *L, struct space *space)
 		case TREE:
 			lua_pushstring(L, "TREE");
 			break;
-		case BITMAP:
-			lua_pushstring(L, "BITMAP");
+		case BITSET:
+			lua_pushstring(L, "BITSET");
 			break;
 		default:
 			panic("unknown index type %d",
