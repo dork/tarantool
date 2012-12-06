@@ -210,10 +210,12 @@ int bitmap_index_iterate_equals(
 	return 0;
 }
 
-int bitmap_index_iterate_all_set(
+static inline
+int bitmap_index_iterate_all_set2(
 			struct bitmap_index *index,
 			struct bitmap_expr *expr,
-			void *key, size_t key_size)
+			void *key, size_t key_size,
+			enum bitmap_unary_op pre_op)
 {
 	assert (index != NULL);
 	assert (expr != NULL);
@@ -237,7 +239,7 @@ int bitmap_index_iterate_all_set(
 			break;
 		}
 		if (bitmap_expr_group_add_bitmap(expr, 0,
-			index->bitmaps[b], BITMAP_OP_NULL) != 0) {
+			index->bitmaps[b], pre_op) != 0) {
 			return -1;
 		}
 
@@ -247,10 +249,28 @@ int bitmap_index_iterate_all_set(
 	return 0;
 }
 
-int bitmap_index_iterate_any_set(
+int bitmap_index_iterate_all_set(struct bitmap_index *index,
+				 struct bitmap_expr *expr,
+				 void *key, size_t key_size)
+{
+	return bitmap_index_iterate_all_set2(index, expr, key, key_size,
+					    BITMAP_OP_NULL);
+}
+
+int bitmap_index_iterate_all_not_set(struct bitmap_index *index,
+				 struct bitmap_expr *expr,
+				 void *key, size_t key_size)
+{
+	return bitmap_index_iterate_all_set2(index, expr, key, key_size,
+					    BITMAP_OP_NOT);
+}
+
+static inline
+int bitmap_index_iterate_any_set2(
 			struct bitmap_index *index,
 			struct bitmap_expr *expr,
-			void *key, size_t key_size)
+			void *key, size_t key_size,
+			enum bitmap_unary_op pre_op)
 {
 	assert (index != NULL);
 	assert (expr != NULL);
@@ -271,7 +291,7 @@ int bitmap_index_iterate_any_set(
 		}
 
 		if (bitmap_expr_group_add_bitmap(expr, 0,
-			index->bitmaps[b], BITMAP_OP_NULL) != 0) {
+			index->bitmaps[b], pre_op) != 0) {
 			return -1;
 		}
 	}
@@ -286,6 +306,24 @@ int bitmap_index_iterate_any_set(
 	}
 
 	return 0;
+}
+
+int bitmap_index_iterate_any_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size)
+{
+	return bitmap_index_iterate_any_set2(index, expr, key, key_size,
+					     BITMAP_OP_NULL);
+}
+
+int bitmap_index_iterate_any_not_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size)
+{
+	return bitmap_index_iterate_any_set2(index, expr, key, key_size,
+					     BITMAP_OP_NOT);
 }
 
 bool bitmap_index_contains_value(struct bitmap_index *index, size_t value) {

@@ -122,7 +122,6 @@ iterator_wrapper_free(struct iterator *iterator)
 	free(it);
 }
 
-
 @implementation BitmapIndex;
 
 + (struct index_traits *) traits
@@ -174,40 +173,27 @@ iterator_wrapper_free(struct iterator *iterator)
 
 - (void) beginBuild
 {
-#ifdef DEBUG
-	say_debug("BitmapIndex beginBuild");
-#endif // DEBUG
+
 }
 
 - (void) buildNext: (struct tuple *)tuple
 {
-	say_debug("BitmapIndex beginNext");
 	[self replace: NULL :tuple];
 }
 
 - (void) endBuild
 {
-#ifdef DEBUG
-	say_debug("BitmapIndex endBuild");
-#endif // DEBUG
+	/* nothing */
 }
 
 - (void) build: (Index *) pk
 {
-#ifdef DEBUG
-	say_debug("BitmapIndex beginBuild from pk");
-#endif // DEBUG
-
 	struct iterator *it = pk->position;
 	struct tuple *tuple;
 	[pk initIterator: it :ITER_ALL :NULL :0];
 
 	while ((tuple = it->next(it)))
 		[self replace: NULL :tuple];
-
-#ifdef DEBUG
-	say_debug("BitmapIndex endBuild from pk");
-#endif // DEBUG
 }
 
 - (size_t) size
@@ -306,7 +292,12 @@ iterator_wrapper_free(struct iterator *iterator)
 	size_t value;
 
 	if (old_tuple != NULL) {
-		make_bitmap_key(old_tuple->data, &bitmap_key, &bitmap_key_size);
+		void *field = tuple_field(old_tuple, key_def->parts[0].fieldno);
+		if (unlikely(field == NULL))
+			tnt_raise(ClientError, :ER_NO_SUCH_FIELD,
+				  key_def->parts[0].fieldno);
+
+		make_bitmap_key(field, &bitmap_key, &bitmap_key_size);
 		value = tuple_to_value(old_tuple);
 #ifdef DEBUG
 		say_debug("BitmapIndex: remove value = %zu (%p)",
@@ -320,9 +311,13 @@ iterator_wrapper_free(struct iterator *iterator)
 	}
 
 	if (new_tuple != NULL) {
-		make_bitmap_key(new_tuple->data, &bitmap_key, &bitmap_key_size);
+		void *field = tuple_field(new_tuple, key_def->parts[0].fieldno);
+		if (unlikely(field == NULL))
+			tnt_raise(ClientError, :ER_NO_SUCH_FIELD,
+				  key_def->parts[0].fieldno);
+
+		make_bitmap_key(field, &bitmap_key, &bitmap_key_size);
 		value = tuple_to_value(new_tuple);
-		make_bitmap_key(new_tuple->data, &bitmap_key, &bitmap_key_size);
 
 #ifdef DEBUG
 		say_debug("BitmapIndex: insert value = %zu (%p)",
@@ -348,12 +343,15 @@ iterator_wrapper_free(struct iterator *iterator)
 	assert(iterator->free == iterator_wrapper_free);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
 
-	check_key_parts(key_def, part_count,
-			bitmap_index_traits.allows_partial_key);
-
 	void *bitmap_key = NULL;
 	size_t bitmap_key_size = 0;
-	make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
+
+	if (type != ITER_ALL) {
+		check_key_parts(key_def, part_count,
+				bitmap_index_traits.allows_partial_key);
+		make_bitmap_key(key, &bitmap_key, &bitmap_key_size);
+	}
+
 
 	int rc = 0;
 	switch (type) {
@@ -366,9 +364,29 @@ iterator_wrapper_free(struct iterator *iterator)
 					index, it->bitmap_expr,
 					bitmap_key, bitmap_key_size);
 		break;
+	case ITER_BITS_ALL_SET:
+		rc = bitmap_index_iterate_all_set(
+					index, it->bitmap_expr,
+					bitmap_key, bitmap_key_size);
+		break;
+	case ITER_BITS_ALL_NOTSET:
+		rc = bitmap_index_iterate_all_not_set(
+					index, it->bitmap_expr,
+					bitmap_key, bitmap_key_size);
+		break;
+	case ITER_BITS_ANY_SET:
+		rc = bitmap_index_iterate_any_set(
+					index, it->bitmap_expr,
+					bitmap_key, bitmap_key_size);
+		break;
+	case ITER_BITS_ANY_NOTSET:
+		rc = bitmap_index_iterate_any_not_set(
+					index, it->bitmap_expr,
+					bitmap_key, bitmap_key_size);
+		break;
 	default:
-		tnt_raise(ClientError, :ER_UNSUPPORTED, "BitmapIndex",
-			  "iterator type");
+		tnt_raise(ClientError, :ER_UNSUPPORTED,
+			  "Bitmap index", "requested iterator type");
 	}
 
 	if (rc != 0) {

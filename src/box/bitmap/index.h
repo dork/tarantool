@@ -100,7 +100,7 @@ int bitmap_index_iterate_equals(
 
 /**
  * @brief All-Bits-Set iteration. Matches all pairs in the index, where
- * all bits from @a key is set in pair.key ((@a key & pair.key) == @a key).
+ * all bits from @a key is set in pair.key ((@a key & pair.key) != @a key).
  * Initialized @a expr can be used with @a bitmap_iterator_init function.
  * @param index
  * @param expr expression
@@ -110,6 +110,22 @@ int bitmap_index_iterate_equals(
  * @see expr.h
  */
 int bitmap_index_iterate_all_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size);
+
+/**
+ * @brief All-Bits-Not-Set iteration. Matches all pairs in the index, where
+ * all bits from @a key is not set in pair.key ((@a key & pair.key) != @a key).
+ * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * @param index
+ * @param expr expression
+ * @param key key
+ * @param key_size size of key
+ * @return zero on success and non-zero otherwise
+ * @see expr.h
+ */
+int bitmap_index_iterate_all_not_set(
 			struct bitmap_index *index,
 			struct bitmap_expr *expr,
 			void *key, size_t key_size);
@@ -126,6 +142,23 @@ int bitmap_index_iterate_all_set(
  * @see expr.h
  */
 int bitmap_index_iterate_any_set(
+			struct bitmap_index *index,
+			struct bitmap_expr *expr,
+			void *key, size_t key_size);
+
+
+/**
+ * @brief Any-Bits-Not-Set iteration. Matches all pairs in the index, where
+ * at least on bit from @a key is not set in pair.key ((@a key & pair.key) != 0).
+ * Initialized @a expr can be used with @a bitmap_iterator_init function.
+ * @param index object
+ * @param expr expression
+ * @param key key
+ * @param key_size size of key
+ * @return zero on success and non-zero otherwise
+ * @see expr.h
+ */
+int bitmap_index_iterate_any_not_set(
 			struct bitmap_index *index,
 			struct bitmap_expr *expr,
 			void *key, size_t key_size);
