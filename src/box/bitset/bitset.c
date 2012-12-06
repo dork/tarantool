@@ -34,7 +34,8 @@
 #include <errno.h>
 
 #if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
-bitset_word_t word_bitmask(int offset)
+bitset_word_t
+word_bitmask(int offset)
 {
 	/*
 	 * SSE2/AVX does not have BIT shift instruction
@@ -103,8 +104,8 @@ bitset_word_t word_bitmask(int offset)
 #endif /* defined(ENABLE_SSE2) || defined(ENABLE_AVX) */
 
 #if   defined(ENABLE_AVX)
-static inline
-int *bit_index_u256(const u256 x, int *indexes, int offset)
+static inline int *
+bit_index_u256(const u256 x, int *indexes, int offset)
 {
 #if   WORD_BIT == 64
 	union __cast {
@@ -139,8 +140,8 @@ int *bit_index_u256(const u256 x, int *indexes, int offset)
 #endif
 
 #if   defined(ENABLE_SSE2)
-static inline
-int *bit_index_u128(const u128 x, int *indexes, int offset)
+static inline int *
+bit_index_u128(const u128 x, int *indexes, int offset)
 {
 #if   WORD_BIT == 64
 	union __cast {
@@ -168,7 +169,8 @@ int *bit_index_u128(const u128 x, int *indexes, int offset)
 }
 #endif
 
-int *word_index(const bitset_word_t word, int *indexes, int offset)
+int *
+word_index(const bitset_word_t word, int *indexes, int offset)
 {
 #if     BITSET_WORD_BIT == 32
 	return bit_index_u32(word, indexes, offset);
@@ -184,7 +186,8 @@ int *word_index(const bitset_word_t word, int *indexes, int offset)
 }
 
 #if defined(DEBUG)
-void word_str_r(bitset_word_t word, char *str, size_t len)
+void
+word_str_r(bitset_word_t word, char *str, size_t len)
 {
 	if (len <= BITSET_WORD_BIT) {
 		str[0] = '\0';
@@ -201,7 +204,8 @@ void word_str_r(bitset_word_t word, char *str, size_t len)
 	}
 }
 
-const char *word_str(bitset_word_t word)
+const char *
+word_str(bitset_word_t word)
 {
 	static char str[BITSET_WORD_BIT + 1];
 	word_str_r(word, str, BITSET_WORD_BIT + 1);
@@ -211,7 +215,8 @@ const char *word_str(bitset_word_t word)
 
 RB_GENERATE(bitset_pages_tree, bitset_page, node, bitset_page_cmp);
 
-bool test_bit(const void *data, size_t pos)
+bool
+test_bit(const void *data, size_t pos)
 {
 	const char *cdata = (const char *) data;
 
@@ -221,7 +226,9 @@ bool test_bit(const void *data, size_t pos)
 	return (cdata[cur_pos] >> cur_offset) & 0x1;
 }
 
-int find_next_set_bit(const void *data, size_t data_size, size_t *ppos) {
+int
+find_next_set_bit(const void *data, size_t data_size, size_t *ppos)
+{
 	const char *cdata = (const char *) data;
 
 	size_t cur_pos = *ppos / CHAR_BIT;
@@ -247,10 +254,14 @@ int find_next_set_bit(const void *data, size_t data_size, size_t *ppos) {
 }
 
 /* bitset_set/bitset_get helpers */
-static void bitset_set_in_page(struct bitset_page *page, size_t pos, bool val);
-static bool bitset_get_from_page(struct bitset_page *page, size_t pos);
+static void
+bitset_set_in_page(struct bitset_page *page, size_t pos, bool val);
 
-int bitset_new(struct bitset **pbitset)
+static bool
+bitset_get_from_page(struct bitset_page *page, size_t pos);
+
+int
+bitset_new(struct bitset **pbitset)
 {
 	*pbitset = calloc(1, sizeof(struct bitset));
 	if (*pbitset == NULL) {
@@ -263,7 +274,8 @@ int bitset_new(struct bitset **pbitset)
 	return 0;
 }
 
-void bitset_free(struct bitset **pbitset)
+void
+bitset_free(struct bitset **pbitset)
 {
 	struct bitset *bitset = *pbitset;
 	if (bitset != NULL) {
@@ -282,7 +294,8 @@ void bitset_free(struct bitset **pbitset)
 }
 
 
-bool bitset_get(struct bitset *bitset, size_t pos)
+bool
+bitset_get(struct bitset *bitset, size_t pos)
 {
 	assert(pos < SIZE_MAX);
 
@@ -299,15 +312,16 @@ bool bitset_get(struct bitset *bitset, size_t pos)
 	return bitset_get_from_page(page, pos - page->first_pos);
 }
 
-static
-bool bitset_get_from_page(struct bitset_page *page, size_t pos)
+static bool
+bitset_get_from_page(struct bitset_page *page, size_t pos)
 {
 	size_t w = pos / BITSET_WORD_BIT;
 	int offset = pos % BITSET_WORD_BIT;
 	return word_test_bit(page->words[w], offset);
 }
 
-int bitset_set(struct bitset *bitset, size_t pos, bool val)
+int
+bitset_set(struct bitset *bitset, size_t pos, bool val)
 {
 	assert(pos < SIZE_MAX);
 
@@ -352,8 +366,8 @@ int bitset_set(struct bitset *bitset, size_t pos, bool val)
 	return 0;
 }
 
-static
-void bitset_set_in_page(struct bitset_page *page, size_t pos, bool val)
+static void
+bitset_set_in_page(struct bitset_page *page, size_t pos, bool val)
 {
 	size_t w = pos / BITSET_WORD_BIT;
 	int offset = pos % BITSET_WORD_BIT;
@@ -364,12 +378,15 @@ void bitset_set_in_page(struct bitset_page *page, size_t pos, bool val)
 	}
 }
 
-size_t bitset_cardinality(struct bitset *bitset) {
+size_t
+bitset_cardinality(struct bitset *bitset) {
 	return bitset->cardinality;
 }
 
 #if defined(DEBUG)
-void bitset_stat(struct bitset *bitset, struct bitset_stat *stat) {
+void
+bitset_stat(struct bitset *bitset, struct bitset_stat *stat)
+{
 	memset(stat, 0, sizeof(*stat));
 
 #if	defined(ENABLE_AVX)
@@ -403,7 +420,9 @@ void bitset_stat(struct bitset *bitset, struct bitset_stat *stat) {
 	stat->mem_other = sizeof(struct bitset);
 }
 
-void bitset_dump(struct bitset *bitset, int verbose, FILE *stream) {
+void
+bitset_dump(struct bitset *bitset, int verbose, FILE *stream)
+{
 	struct bitset_stat stat;
 	bitset_stat(bitset, &stat);
 

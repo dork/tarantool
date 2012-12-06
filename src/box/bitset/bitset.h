@@ -49,13 +49,15 @@ struct bitset;
  * @brief Allocates and construct new bitset and sets value of *pbitset.
  * @param pbitset
  */
-int bitset_new(struct bitset **pbitset);
+int
+bitset_new(struct bitset **pbitset);
 
 /**
  * @brief Destruct and deallocates bitsets and sets *pbitset to NULL.
  * @param pbitset
  */
-void bitset_free(struct bitset **pbitset);
+void
+bitset_free(struct bitset **pbitset);
 
 /**
  * @brief Gets a bit from the bitset
@@ -63,7 +65,8 @@ void bitset_free(struct bitset **pbitset);
  * @param pos position (index)
  * @return bit value
  */
-bool bitset_get(struct bitset *bitset, size_t pos);
+bool
+bitset_get(struct bitset *bitset, size_t pos);
 
 /**
  * @brief Sets a bit in the bitset
@@ -71,7 +74,8 @@ bool bitset_get(struct bitset *bitset, size_t pos);
  * @param pos position (index)
  * @return 0 on success and -1 on error
  */
-int bitset_set(struct bitset *bitset, size_t pos, bool val);
+int
+bitset_set(struct bitset *bitset, size_t pos, bool val);
 
 
 /**
@@ -79,7 +83,8 @@ int bitset_set(struct bitset *bitset, size_t pos, bool val);
  * @param bitset object
  * @return returns the number of bits set to true in this bitset.
  */
-size_t bitset_cardinality(struct bitset *bitset);
+size_t
+bitset_cardinality(struct bitset *bitset);
 
 
 #if defined(DEBUG)
@@ -99,8 +104,11 @@ struct bitset_stat {
 };
 
 #include <stdio.h>
-void bitset_stat(struct bitset *bitset, struct bitset_stat *stat);
-void bitset_dump(struct bitset *bitset, int verbose, FILE *stream);
+void
+bitset_stat(struct bitset *bitset, struct bitset_stat *stat);
+
+void
+bitset_dump(struct bitset *bitset, int verbose, FILE *stream);
 #endif
 
 #endif // BITSET_BITSET_H_INCLUDED

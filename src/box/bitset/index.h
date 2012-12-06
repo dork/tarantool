@@ -93,10 +93,10 @@ int bitset_index_remove(struct bitset_index *index,
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitset_index_iterate_equals(
-			struct bitset_index *index,
-			struct bitset_expr *expr,
-			void *key, size_t key_size);
+int
+bitset_index_iterate_equals(struct bitset_index *index,
+			    struct bitset_expr *expr,
+			    void *key, size_t key_size);
 
 /**
  * @brief All-Bits-Set iteration. Matches all pairs in the index, where
@@ -109,10 +109,10 @@ int bitset_index_iterate_equals(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitset_index_iterate_all_set(
-			struct bitset_index *index,
-			struct bitset_expr *expr,
-			void *key, size_t key_size);
+int
+bitset_index_iterate_all_set(struct bitset_index *index,
+			     struct bitset_expr *expr,
+			     void *key, size_t key_size);
 
 /**
  * @brief All-Bits-Not-Set iteration. Matches all pairs in the index, where
@@ -125,10 +125,10 @@ int bitset_index_iterate_all_set(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitset_index_iterate_all_not_set(
-			struct bitset_index *index,
-			struct bitset_expr *expr,
-			void *key, size_t key_size);
+int
+bitset_index_iterate_all_not_set(struct bitset_index *index,
+				 struct bitset_expr *expr,
+				 void *key, size_t key_size);
 
 /**
  * @brief Any-Bits-Set iteration. Matches all pairs in the index, where
@@ -141,10 +141,10 @@ int bitset_index_iterate_all_not_set(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitset_index_iterate_any_set(
-			struct bitset_index *index,
-			struct bitset_expr *expr,
-			void *key, size_t key_size);
+int
+bitset_index_iterate_any_set(struct bitset_index *index,
+			     struct bitset_expr *expr,
+			     void *key, size_t key_size);
 
 
 /**
@@ -158,10 +158,10 @@ int bitset_index_iterate_any_set(
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitset_index_iterate_any_not_set(
-			struct bitset_index *index,
-			struct bitset_expr *expr,
-			void *key, size_t key_size);
+int
+bitset_index_iterate_any_not_set(struct bitset_index *index,
+				 struct bitset_expr *expr,
+				 void *key, size_t key_size);
 
 /**
  * @brief Checks if a pairs with @a value exists in the index
@@ -169,21 +169,21 @@ int bitset_index_iterate_any_not_set(
  * @param value
  * @return true if the index contains pair with the @a value
  */
-bool bitset_index_contains_value(struct bitset_index *index, size_t value);
+bool
+bitset_index_contains_value(struct bitset_index *index, size_t value);
 
 /**
  * @brief Returns number of pairs in the index.
  * @param index object
  * @return number of pairs in this index
  */
-size_t bitset_index_size(struct bitset_index *index);
+size_t
+bitset_index_size(struct bitset_index *index);
 
 
 #if defined(DEBUG)
-/* TODO: implement bitset_index_stat */
-void bitset_index_dump(struct bitset_index *index,
-		       int verbose, FILE *stream);
-
+void
+bitset_index_dump(struct bitset_index *index, int verbose, FILE *stream);
 #endif /* defined(DEBUG) */
 
 #endif // BITSET_INDEX_H_INCLUDED

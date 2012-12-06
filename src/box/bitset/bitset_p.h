@@ -91,8 +91,8 @@ typedef size_t bitset_word_t; /* is always size_t if sse is disabled */
 
 /* TODO(roman): implement word_xxx methods using SSE2 */
 
-static inline
-bitset_word_t word_set_zeros()
+static inline bitset_word_t
+word_set_zeros()
 {
 #if defined(ENABLE_AVX)
 	return _mm256_setzero_si256();
@@ -103,8 +103,8 @@ bitset_word_t word_set_zeros()
 #endif
 }
 
-static inline
-bitset_word_t word_set_ones()
+static inline bitset_word_t
+word_set_ones()
 {
 #if defined(ENABLE_AVX)
 	return _mm256_setr_epi32(-1, -1, -1, -1, -1, -1, -1, -1);
@@ -116,8 +116,8 @@ bitset_word_t word_set_ones()
 #endif
 }
 
-static inline
-bool word_test_zeros(const bitset_word_t word)
+static inline bool
+word_test_zeros(const bitset_word_t word)
 {
 #if   defined(ENABLE_AVX)
 	return _mm256_testz_si256(word, word) != 0;
@@ -129,8 +129,8 @@ bool word_test_zeros(const bitset_word_t word)
 #endif
 }
 
-static inline
-bool word_test_ones(const bitset_word_t word)
+static inline bool
+word_test_ones(const bitset_word_t word)
 {
 #if   defined(ENABLE_AVX)
 	return _mm256_testc_si256(word, word) != 0;
@@ -142,74 +142,76 @@ bool word_test_ones(const bitset_word_t word)
 #endif
 }
 
-static inline
-bitset_word_t word_not(const bitset_word_t word)
+static inline bitset_word_t
+word_not(const bitset_word_t word)
 {
 	return ~word;
 }
 
-static inline
-bitset_word_t word_and(const bitset_word_t word1, const bitset_word_t word2)
+static inline bitset_word_t
+word_and(const bitset_word_t word1, const bitset_word_t word2)
 {
 	return (word1 & word2);
 }
 
-static inline
-bitset_word_t word_nand(const bitset_word_t word1, const bitset_word_t word2)
+static inline bitset_word_t
+word_nand(const bitset_word_t word1, const bitset_word_t word2)
 {
 	return ~(word1 & word2);
 }
 
-static inline
-bitset_word_t word_or(const bitset_word_t word1, const bitset_word_t word2)
+static inline bitset_word_t
+word_or(const bitset_word_t word1, const bitset_word_t word2)
 {
 	return (word1 | word2);
 }
 
-static inline
-bitset_word_t word_nor(bitset_word_t word1, bitset_word_t word2)
+static inline bitset_word_t
+word_nor(bitset_word_t word1, bitset_word_t word2)
 {
 	return ~(word1 | word2);
 }
 
-static inline
-bitset_word_t word_xor(const bitset_word_t word1, const bitset_word_t word2)
+static inline bitset_word_t
+word_xor(const bitset_word_t word1, const bitset_word_t word2)
 {
 	return (word1 ^ word2);
 }
 
-static inline
-bitset_word_t word_xnor(const bitset_word_t word1, const bitset_word_t word2)
+static inline bitset_word_t
+word_xnor(const bitset_word_t word1, const bitset_word_t word2)
 {
 	return ~(word1 ^ word2);
 }
 
 #if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
 /* don't inline this method if SSE2/AVX is enabled (too much code) */
-bitset_word_t word_bitmask(int offset);
+bitset_word_t
+word_bitmask(int offset);
 #else /* !defined(ENABLE_SSE2) && !defined(ENABLE_AVX)) */
-static inline bitset_word_t word_bitmask(int offset)
+static inline
+bitset_word_t word_bitmask(int offset)
 {
 	return (bitset_word_t) 1 << offset;
 }
 #endif
 
-static inline
-bool word_test_bit(const bitset_word_t word, int offset)
+static inline bool
+word_test_bit(const bitset_word_t word, int offset)
 {
 	const bitset_word_t mask = word_bitmask(offset);
 	return !word_test_zeros(word & mask);
 }
 
-static inline
-bitset_word_t word_set_bit(const bitset_word_t word, int offset)
+static inline bitset_word_t
+word_set_bit(const bitset_word_t word, int offset)
 {
 	const bitset_word_t mask = word_bitmask(offset);
 	return (word | mask);
 }
 
-static inline
-bitset_word_t word_clear_bit(const bitset_word_t word, int offset)
+static inline bitset_word_t
+word_clear_bit(const bitset_word_t word, int offset)
 {
 	const bitset_word_t mask = word_bitmask(offset);
 	return (word & (~mask));
@@ -223,19 +225,29 @@ bitset_word_t word_clear_bit(const bitset_word_t word, int offset)
  * 0 if word is zero.
  */
 
-int word_find_set_bit(const bitset_word_t word, int start_pos);
-int *word_index(const bitset_word_t word, int *indexes, int offset);
+int
+word_find_set_bit(const bitset_word_t word, int start_pos);
+
+int *
+word_index(const bitset_word_t word, int *indexes, int offset);
 
 #if defined(DEBUG)
-const char *word_str(bitset_word_t word);
-void word_str_r(bitset_word_t word, char *str, size_t len);
+const char *
+word_str(bitset_word_t word);
+
+void
+word_str_r(bitset_word_t word, char *str, size_t len);
 #endif /* !defined(DEBUG) */
 
 /*
  * General-purpose bit-manipulation functions
  */
-bool test_bit(const void *data, size_t pos);
-int find_next_set_bit(const void *data, size_t data_size, size_t *ppos);
+bool
+test_bit(const void *data, size_t pos);
+
+int
+find_next_set_bit(const void *data, size_t data_size, size_t *ppos);
+
 /**
  * Bitset definition
  */
@@ -251,13 +263,14 @@ struct bitset_page {
 	size_t first_pos;
 } __attribute__ ((aligned(BITSET_WORD_ALIGNMENT)));
 
-static inline
-size_t bitset_page_first_pos(size_t pos) {
+static inline size_t
+bitset_page_first_pos(size_t pos) {
 	return (pos - (pos % BITSET_PAGE_BIT));
 }
 
 #ifdef DEBUG
-void bitset_debug_print(struct bitset *bitset);
+void
+bitset_debug_print(struct bitset *bitset);
 #endif /* def DEBUG */
 
 /*

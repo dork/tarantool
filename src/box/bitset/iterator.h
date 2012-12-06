@@ -58,14 +58,16 @@ struct bitset_iterator;
  * @param pit pointer to object
  * @return zero on success and non-zero otherwise
  */
-int bitset_iterator_new(struct bitset_iterator **pit);
+int
+bitset_iterator_new(struct bitset_iterator **pit);
 
 /**
  * @brief Destroys thee iterator
  * @param pit pointer to object
  * @see bitset_iterator_new
  */
-void bitset_iterator_free(struct bitset_iterator **pit);
+void
+bitset_iterator_free(struct bitset_iterator **pit);
 
 /**
  * @brief Initializer interator from the @a expr.
@@ -81,8 +83,9 @@ void bitset_iterator_free(struct bitset_iterator **pit);
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
-int bitset_iterator_set_expr(struct bitset_iterator *it,
-			     struct bitset_expr *expr);
+int
+bitset_iterator_set_expr(struct bitset_iterator *it,
+			 struct bitset_expr *expr);
 
 /**
  * @brief Returns a pointer to current iterator expression
@@ -99,7 +102,8 @@ bitset_iterator_get_expr(struct bitset_iterator *it);
  * @param it object
  * @see bitset_iterator_set_expr
  */
-void bitset_iterator_rewind(struct bitset_iterator *it);
+void
+bitset_iterator_rewind(struct bitset_iterator *it);
 
 /**
  * @brief Moves iterator to next position.
@@ -107,7 +111,7 @@ void bitset_iterator_rewind(struct bitset_iterator *it);
  * @param it object
  * @return offset where next bit is set or SIZE_MAX if no more bits
  */
-size_t bitset_iterator_next(struct bitset_iterator *it);
-
+size_t
+bitset_iterator_next(struct bitset_iterator *it);
 
 #endif /* BITSET_ITERATOR_H_INCLUDED */

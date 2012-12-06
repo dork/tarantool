@@ -4,7 +4,7 @@
  * bit_index
  */
 
-#define __BITINDEX_NAIVE(x, bitsize) {					\
+#define BITINDEX_NAIVE(x, bitsize) {					\
 	/* naive generic implementation, worst case */			\
 	size_t bit = 1;							\
 	int i = 0;							\
@@ -19,7 +19,8 @@
 	return indexes + i;						\
 }
 
-int *bit_index_u32(u32 x, int *indexes, int offset)
+int *
+bit_index_u32(u32 x, int *indexes, int offset)
 {
 #if  defined(HAVE_CTZ)
 	int prev_pos = 0;
@@ -45,11 +46,12 @@ int *bit_index_u32(u32 x, int *indexes, int offset)
 	indexes[i] = 0;
 	return indexes + i;
 #else /* !defined(HAVE_CTZ) */
-	__BITINDEX_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
+	BITINDEX_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
 #endif
 }
 
-int *bit_index_u64(u64 x, int *indexes, int offset) {
+int *
+bit_index_u64(u64 x, int *indexes, int offset) {
 #if  defined(HAVE_CTZLL)
 	int prev_pos = 0;
 	int i = 0;
@@ -74,8 +76,8 @@ int *bit_index_u64(u64 x, int *indexes, int offset) {
 	indexes[i] = 0;
 	return indexes + i;
 #else /* !defined(HAVE_CTZ) */
-	__BITINDEX_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
+	BITINDEX_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
 #endif
 }
 
-#undef __BITINDEX_NAIVE
+#undef BITINDEX_NAIVE

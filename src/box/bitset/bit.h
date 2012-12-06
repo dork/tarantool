@@ -18,7 +18,7 @@
  * @brief Naive implementation of ctz.
  * @cond false
  */
-#define __CTZ_NAIVE(x, bitsize) {					\
+#define CTZ_NAIVE(x, bitsize) {					\
 	if (x == 0) {							\
 		return (bitsize);					\
 	}								\
@@ -40,36 +40,30 @@
  * @see __builtin_ctz()
  * @return the number trailing 0-bits
  */
-static inline
-#if   defined(HAVE_CTZ)
-int bit_ctz_u32(u32 x)
+static inline int
+bit_ctz_u32(u32 x)
 {
+#if defined(HAVE_CTZ)
 	return __builtin_ctz(x);
-}
 #else /* !defined(HAVE_CTZ) */
-int bit_ctz_u32(u32 x)
-{
-	__CTZ_NAIVE(x, __SIZEOF_INT__ * CHAR_BIT);
-}
+	CTZ_NAIVE(x, __SIZEOF_INT__ * CHAR_BIT);
 #endif
+}
 
 /**
  * @copydoc bit_ctz_u32
  */
-static inline
+static inline int
+bit_ctz_u64(u64 x)
+{
 #if   defined(HAVE_CTZLL)
-int bit_ctz_u64(u64 x)
-{
 	return __builtin_ctzll(x);
-}
 #else /* !defined(HAVE_CTZLL) */
-int bit_ctz_u64(u64 x)
-{
-	__CTZ_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
-}
+	CTZ_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
 #endif
+}
 
-#undef __CTZ_NAIVE
+#undef CTZ_NAIVE
 
 
 /*
@@ -80,7 +74,7 @@ int bit_ctz_u64(u64 x)
  * @brief Naive implementation of clz.
  * @cond false
  */
-#define __CLZ_NAIVE(x, bitsize) {					\
+#define CLZ_NAIVE(x, bitsize) {					\
 	if (x == 0) {							\
 		return  (bitsize);					\
 	}								\
@@ -102,38 +96,29 @@ int bit_ctz_u64(u64 x)
  * @see __builtin_clz()
  * @return the number of leading 0-bits
  */
-static inline
+static inline int
+bit_clz_u32(u32 x)
+{
 #if   defined(HAVE_CLZ)
-int bit_clz_u32(u32 x)
-{
 	return __builtin_clz(x);
-}
 #else /* !defined(HAVE_CLZ) */
-int bit_clz_u32(u32 x)
-{
-	__CLZ_NAIVE(x, __SIZEOF_INT__ * CHAR_BIT);
-}
-
+	CLZ_NAIVE(x, __SIZEOF_INT__ * CHAR_BIT);
 #endif
-
+}
 
 /**
  * @copydoc bit_clz_u32
  */
-static inline
+static inline int
+bit_clz_u64(u64 x)
+{
 #if   defined(HAVE_CLZLL)
-int bit_clz_u64(u64 x)
-{
 	return __builtin_clzll(x);
-}
 #else /* !defined(HAVE_CLZLL) */
-int bit_clz_u64(u64 x)
-{
-	__CLZ_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
-}
+	CLZ_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
 #endif
-
-#undef __CLZ_NAIVE
+}
+#undef CLZ_NAIVE
 
 /*
  * bit_count
@@ -143,7 +128,7 @@ int bit_clz_u64(u64 x)
  * @brief Naive implementation of popcount.
  * @cond false
  */
-#define __POPCOUNT_NAIVE(x, bitsize)  {					\
+#define POPCOUNT_NAIVE(x, bitsize)  {					\
 	int r;								\
 	for (r = 0; x; r++) {						\
 		x &= (x-1);						\
@@ -159,36 +144,29 @@ int bit_clz_u64(u64 x)
  * @see __builtin_popcount()
  * @return the number of 1-bits in x
  */
-static inline
+static inline int
+bit_count_u32(u32 x)
+{
 #if   defined(HAVE_POPCOUNT)
-int bit_count_u32(u32 x)
-{
 	return __builtin_popcount(x);
-}
 #else /* !defined(HAVE_POPCOUNT) */
-int bit_count_u32(u32 x)
-{
-	__POPCOUNT_NAIVE(x, __SIZEOF_INT__ * CHAR_BIT);
-}
+	POPCOUNT_NAIVE(x, __SIZEOF_INT__ * CHAR_BIT);
 #endif
+}
 
 /**
  * @copydoc bit_count_u32
  */
-static inline
+static inline int
+bit_count_u64(u64 x)
+{
 #if   defined(HAVE_POPCOUNTLL)
-int bit_count_u64(u64 x)
-{
 	return __builtin_popcountll(x);
-}
 #else /* !defined(HAVE_POPCOUNTLL) */
-int bit_count_u64(u64 x)
-{
-	__POPCOUNT_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
-}
+	POPCOUNT_NAIVE(x, __SIZEOF_LONG_LONG__ * CHAR_BIT);
 #endif
-
-#undef __POPCOUNT_NAIVE
+}
+#undef POPCOUNT_NAIVE
 
 /*
  * bit_index
@@ -203,11 +181,13 @@ int bit_count_u64(u64 x)
  * @param offset a number added to each index
  * @return pointer to last+1 element in indexes array
  */
-int *bit_index_u32(u32 x, int *indexes, int offset);
+int *
+bit_index_u32(u32 x, int *indexes, int offset);
 
 /**
  * @copydoc bit_index_u32
  */
-int *bit_index_u64(u64 x, int *indexes, int offset);
+int *
+bit_index_u64(u64 x, int *indexes, int offset);
 
 #endif // UTIL_H

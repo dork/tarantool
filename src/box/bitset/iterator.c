@@ -132,18 +132,21 @@ itstate_reserve_group(struct bitset_itstate *itstate,
 }
 
 
-static
-int next_word(struct bitset_iterator *it);
-static
-int next_word_in_group(struct bitset_expr_group *group,
-		       struct bitset_itstate_group *state,
-		       size_t *cur_pos, bitset_word_t *pword);
-static
-void next_word_in_bitset(struct bitset *bitset,
-			 struct bitset_page **ppage, size_t *poffset,
-			 int bitset_ops, bitset_word_t *word);
+static int
+next_word(struct bitset_iterator *it);
 
-int bitset_iterator_new(struct bitset_iterator **pit)
+static int
+next_word_in_group(struct bitset_expr_group *group,
+		   struct bitset_itstate_group *state,
+		   size_t *cur_pos, bitset_word_t *pword);
+
+static void
+next_word_in_bitset(struct bitset *bitset,
+		    struct bitset_page **ppage, size_t *poffset,
+		    int bitset_ops, bitset_word_t *word);
+
+int
+bitset_iterator_new(struct bitset_iterator **pit)
 {
 	int rc = -1;
 	struct bitset_iterator *it = calloc(1, sizeof(struct bitset_iterator));
@@ -191,8 +194,8 @@ error_0:
 }
 
 #if !defined(NDEBUG)
-static inline
-void check_expr(struct bitset_expr *expr)
+static inline void
+check_expr(struct bitset_expr *expr)
 {
 	/* sanity checks */
 	for (size_t g = 0; g < expr->groups_size; g++) {
@@ -215,8 +218,9 @@ void check_expr(struct bitset_expr *expr)
 }
 #endif /* !defined(DEBUG) */
 
-int bitset_iterator_set_expr(struct bitset_iterator *it,
-			     struct bitset_expr *expr)
+int
+bitset_iterator_set_expr(struct bitset_iterator *it,
+			 struct bitset_expr *expr)
 {
 	assert(it != NULL);
 	assert(expr != NULL);
@@ -242,13 +246,15 @@ int bitset_iterator_set_expr(struct bitset_iterator *it,
 	return 0;
 }
 
-struct bitset_expr *bitset_iterator_get_expr(struct bitset_iterator *it)
+struct bitset_expr *
+bitset_iterator_get_expr(struct bitset_iterator *it)
 {
 	assert(it != NULL);
 	return it->expr;
 }
 
-void bitset_iterator_free(struct bitset_iterator **pit)
+void
+bitset_iterator_free(struct bitset_iterator **pit)
 {
 	struct bitset_iterator *it = *pit;
 
@@ -293,7 +299,8 @@ bitset_iterator_rewind(struct bitset_iterator *it)
 	it->indexes_pos = 0;
 }
 
-size_t bitset_iterator_next(struct bitset_iterator *it)
+size_t
+bitset_iterator_next(struct bitset_iterator *it)
 {
 	assert(it->expr != NULL);
 
@@ -325,8 +332,9 @@ size_t bitset_iterator_next(struct bitset_iterator *it)
 	return SIZE_MAX;
 }
 
-static
-int next_word(struct bitset_iterator *it) {
+static int
+next_word(struct bitset_iterator *it)
+{
 	bitset_word_t word;
 
 	if (it->expr->groups_size == 1) {
@@ -385,19 +393,19 @@ int next_word(struct bitset_iterator *it) {
 }
 
 
-static
-int next_word_in_group_and(struct bitset_expr_group *group,
-			      struct bitset_itstate_group *state,
-			      size_t *pcur_pos, bitset_word_t *pword);
-static
-int next_word_in_group_or_xor(struct bitset_expr_group *group,
-			      struct bitset_itstate_group *state,
-			      size_t *pcur_pos, bitset_word_t *pword);
+static int
+next_word_in_group_and(struct bitset_expr_group *group,
+		       struct bitset_itstate_group *state,
+		       size_t *pcur_pos, bitset_word_t *pword);
+static int
+next_word_in_group_or_xor(struct bitset_expr_group *group,
+			  struct bitset_itstate_group *state,
+			  size_t *pcur_pos, bitset_word_t *pword);
 
-static
-int next_word_in_group(struct bitset_expr_group *group,
-		     struct bitset_itstate_group *state,
-		     size_t *pcur_pos, bitset_word_t *pword)
+static int
+next_word_in_group(struct bitset_expr_group *group,
+		   struct bitset_itstate_group *state,
+		   size_t *pcur_pos, bitset_word_t *pword)
 {
 	*pcur_pos = *pcur_pos - (*pcur_pos % BITSET_WORD_BIT);
 
@@ -420,10 +428,11 @@ int next_word_in_group(struct bitset_expr_group *group,
 	}
 }
 
-static
-int next_word_in_group_and(struct bitset_expr_group *group,
-			      struct bitset_itstate_group *state,
-			      size_t *pcur_pos, bitset_word_t *pword) {
+static int
+next_word_in_group_and(struct bitset_expr_group *group,
+		       struct bitset_itstate_group *state,
+		       size_t *pcur_pos, bitset_word_t *pword)
+{
 	assert(group->reduce_op == BITSET_OP_AND);
 
 #if 0
@@ -510,10 +519,11 @@ int next_word_in_group_and(struct bitset_expr_group *group,
 	return 0;
 }
 
-static
-int next_word_in_group_or_xor(struct bitset_expr_group *group,
-			      struct bitset_itstate_group *state,
-			      size_t *pcur_pos, bitset_word_t *pword) {
+static int
+next_word_in_group_or_xor(struct bitset_expr_group *group,
+			  struct bitset_itstate_group *state,
+			  size_t *pcur_pos, bitset_word_t *pword)
+{
 	assert(group->reduce_op == BITSET_OP_OR ||
 	       group->reduce_op == BITSET_OP_XOR);
 
@@ -583,10 +593,9 @@ int next_word_in_group_or_xor(struct bitset_expr_group *group,
 
 #define USE_FINDFROM 1
 #ifdef USE_FINDFROM
-static
-struct bitset_page *bitset_pages_tree_RB_FIND_FROM(
-		struct bitset_page *page,
-		struct bitset_page *key) {
+static struct bitset_page *
+bitset_pages_tree_RB_FIND_FROM(struct bitset_page *page, struct bitset_page *key)
+{
 	/* at next time try to lookup starting from current node */
 	while ((page != NULL) && (page->first_pos < key->first_pos)) {
 		page =  bitset_pages_tree_RB_NEXT(page);
@@ -596,10 +605,11 @@ struct bitset_page *bitset_pages_tree_RB_FIND_FROM(
 }
 #endif
 
-static
-void next_word_in_bitset(struct bitset *bitset,
-			 struct bitset_page **ppage, size_t *poffset,
-			 int bitset_ops, bitset_word_t *word) {
+static void
+next_word_in_bitset(struct bitset *bitset,
+		    struct bitset_page **ppage, size_t *poffset,
+		    int bitset_ops, bitset_word_t *word)
+{
 
 	struct bitset_page key;
 	key.first_pos = bitset_page_first_pos(*poffset);
