@@ -99,39 +99,46 @@ bitset_index_insert(struct bitset_index *index, void *key, size_t key_size,
 		/* Resize index */
 		struct bitset **bitsets = realloc(index->bitsets,
 				bitsets_size_new * sizeof(*index->bitsets));
-		if (bitsets == NULL) {
+		if (bitsets == NULL)
 			return -1;
-		}
 
 		for (size_t b = index->bitsets_size; b < bitsets_size_new; b++) {
 			bitsets[b] = NULL;
 		}
+
 		index->bitsets = bitsets;
 		index->bitsets_size = bitsets_size_new;
 	}
 
 	/* Set bits in bitsets */
-	size_t pos = 0;
-	while(find_next_set_bit(key, key_size, &pos) == 0) {
-		size_t b = pos + 1;
-		if (index->bitsets[b] == NULL) {
-			index->bitsets[b] = bitset_new();
-			if (!index->bitsets[b])
-				return -1;
+	for(size_t pos = 0; find_next_set_bit(key, key_size, &pos) == 0;pos++) {
+		if (index->bitsets[pos+1] == NULL) {
+			index->bitsets[pos+1] = bitset_new();
+			if (index->bitsets[pos+1] == NULL)
+				goto rollback;
 		}
 
-		/* TODO(roman): rollback previous operations on error */
-		if (bitset_set(index->bitsets[b], value, 1) < 0) {
-			return -1;
-		}
-		pos++;
+		if (bitset_set(index->bitsets[pos+1], value, 1) < 0)
+			goto rollback;
 	}
 
-	if (bitset_set(index->bitsets[0], value, 1) < 0) {
-		return -1;
-	}
+	if (bitset_set(index->bitsets[0], value, 1) < 0)
+		goto rollback;
 
 	return 0;
+
+rollback:
+	/* Rollback changes */
+	for(size_t pos = 0; find_next_set_bit(key, key_size, &pos) == 0;pos++) {
+		if (index->bitsets[pos+1] == NULL)
+			continue;
+
+		bitset_set(index->bitsets[pos+1], value, 0);
+	}
+
+	bitset_set(index->bitsets[0], value, 0);
+
+	return -1;
 }
 
 int
