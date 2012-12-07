@@ -59,26 +59,6 @@ struct tuple *value_to_tuple(size_t value) {
 	return salloc_ptr_from_index(value);
 }
 
-inline
-void make_bitset_key(void *key, void **bitset_key, size_t *bitset_key_size) {
-	assert(key != NULL);
-
-	u32 size = load_varint32(&key);
-	*bitset_key = key;
-	*bitset_key_size = (size_t) size;
-#ifdef DEBUG
-	if (size == 4) {
-		u32 kk;
-		memcpy(&kk, key, size);
-		say_debug("BitsetIndex: make_bitset_key (u32) %u", kk);
-	} else if(size == 8) {
-		u64 kk;
-		memcpy(&kk, key, size);
-		say_debug("BitsetIndex: make_bitset_key (u64) %lu", kk);
-	}
-#endif /* DEBUG */
-}
-
 /* wraps bitset_iterator insed tarantool's iterator */
 struct iterator_wrapper {
 	struct iterator base; /* Must be the first member. */
@@ -102,12 +82,7 @@ iterator_wrapper_next(struct iterator *iterator)
 	if (value == SIZE_MAX) {
 		return NULL;
 	} else {
-		struct tuple *tuple = value_to_tuple(value);
-#ifdef DEBUG
-		say_debug("BitsetIndex: iterator_next = %zu (%p)",
-			  value, tuple);
-#endif /* DEBUG */
-		return tuple;
+		return value_to_tuple(value);
 	}
 }
 
@@ -252,14 +227,14 @@ iterator_wrapper_free(struct iterator *iterator)
 
 - (struct tuple *) findUnsafe: (void *) key :(int) part_count
 {
-	(void) part_count;
-
-	void *bitset_key = NULL;
-	size_t bitset_key_size = 0;
-	make_bitset_key(key, &bitset_key, &bitset_key_size);
-
 	assert(position->free == iterator_wrapper_free);
 	struct iterator_wrapper *it = iterator_wrapper(position);
+
+	(void) part_count;
+
+	void *key2 = key;
+	size_t bitset_key_size = (size_t) load_varint32(&key2);
+	void *bitset_key = key2;
 
 	if (bitset_index_iterate_equals(
 				index, it->bitset_expr,
@@ -275,16 +250,15 @@ iterator_wrapper_free(struct iterator *iterator)
 
 	size_t value = bitset_iterator_next(it->bitset_it);
 
-	if (value == SIZE_MAX) {
+	if (value == SIZE_MAX)
 		return NULL;
-	} else {
-		struct tuple *tuple = value_to_tuple(value);
+
+	struct tuple *tuple = value_to_tuple(value);
 #ifdef DEBUG
-		say_debug("BitsetIndex: findUnsafe value = %zu (%p)",
-			  value, tuple);
+	say_debug("BitsetIndex: findUnsafe value = %zu (%p)",
+		  value, tuple);
 #endif
-		return tuple;
-	}
+	return tuple;
 }
 
 - (struct tuple *) replace: (struct tuple *) old_tuple
@@ -303,10 +277,8 @@ iterator_wrapper_free(struct iterator *iterator)
 		if (unlikely(field == NULL))
 			tnt_raise(ClientError, :ER_NO_SUCH_FIELD,
 				  key_def->parts[0].fieldno);
-
-		void *bitset_key;
-		size_t bitset_key_size;
-		make_bitset_key(field, &bitset_key, &bitset_key_size);
+		size_t bitset_key_size = (size_t) load_varint32(&field);
+		void *bitset_key = field;
 
 		size_t value = tuple_to_value(new_tuple);
 #ifdef DEBUG
@@ -365,9 +337,10 @@ iterator_wrapper_free(struct iterator *iterator)
 	if (type != ITER_ALL) {
 		check_key_parts(key_def, part_count,
 				bitset_index_traits.allows_partial_key);
-		make_bitset_key(key, &bitset_key, &bitset_key_size);
+		void *key2 = key;
+		bitset_key_size = (size_t) load_varint32(&key);
+		bitset_key = key2;
 	}
-
 
 	int rc = 0;
 	switch (type) {
