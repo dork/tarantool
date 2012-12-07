@@ -58,6 +58,7 @@ struct bitset_expr_group {
 	} elements[];
 };
 
+/** bitset_expr struct **/
 struct bitset_expr {
 	/** groups */
 	struct bitset_expr_group **groups;
@@ -69,7 +70,9 @@ struct bitset_expr {
 	bool in_group;
 };
 
+/** @cond false **/
 extern const size_t EXPR_DEFAULT_CAPACITY;
 extern const size_t EXPR_GROUP_DEFAULT_CAPACITY;
+/** @endcond **/
 
 #endif /* BITSET_EXPR_P_H_INCLUDED */

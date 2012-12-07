@@ -29,9 +29,6 @@
 
 #include "index.h"
 
-#include <errno.h>
-#include <limits.h>
-
 #include "bitset_p.h"
 
 struct bitset_index {
@@ -262,15 +259,15 @@ bitset_index_iterate_all_set2(struct bitset_index *index,
 		return -1;
 	}
 
-	size_t pos = 0;
-	while(find_next_set_bit(key, key_size, &pos) == 0) {
-		size_t b = pos + 1;
-		if (index->bitsets[b] == NULL || b >= index->bitsets_size) {
+	for (size_t pos = 0; find_next_set_bit(key, key_size, &pos) == 0;pos++){
+		if ((pos+1) >= index->bitsets_size ||
+		    index->bitsets[pos+1] == NULL) {
 			bitset_expr_clear(expr);
 			break;
 		}
+
 		if (bitset_expr_group_add_bitset(expr, 0,
-			index->bitsets[b], pre_op) != 0) {
+			index->bitsets[pos+1], pre_op) != 0) {
 			return -1;
 		}
 
@@ -313,17 +310,15 @@ bitset_index_iterate_any_set2(struct bitset_index *index,
 		return -1;
 	}
 
-	for (size_t pos = 0;
-	     find_next_set_bit(key, key_size, &pos) == 0;
-	     pos++) {
-		size_t b = pos + 1;
-		if (index->bitsets[b] == NULL) {
+	for (size_t pos = 0; find_next_set_bit(key, key_size, &pos) == 0;pos++){
+		if ((pos+1) >= index->bitsets_size ||
+		    index->bitsets[pos+1] == NULL) {
 			/* do not have bitset for this bit */
 			continue;
 		}
 
 		if (bitset_expr_group_add_bitset(expr, 0,
-			index->bitsets[b], pre_op) != 0) {
+			index->bitsets[pos+1], pre_op) != 0) {
 			return -1;
 		}
 	}

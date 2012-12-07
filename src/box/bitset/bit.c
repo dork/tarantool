@@ -31,7 +31,7 @@ bit_index_u32(u32 x, int *indexes, int offset)
 	const int count = bit_count_u32(x);
 	while (i < count) {
 #else
-	/* use sligtly slower implementation without popcnt */
+	/* sligtly slower implementation without using hw popcnt */
 	while(x) {
 #endif
 		/* use ctz */
@@ -61,7 +61,7 @@ bit_index_u64(u64 x, int *indexes, int offset) {
 	const int count = bit_count_u64(x);
 	while (i < count) {
 #else
-	/* use sligtly slower implementation without popcnt */
+	/* sligtly slower implementation without using hw popcnt */
 	while(x) {
 #endif
 		/* use ctz */

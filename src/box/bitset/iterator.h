@@ -32,10 +32,14 @@
 
 /**
  * @file
- * @brief Iterator for bitset objects.
+ * @brief Iterator for @link bitset.h bitset @endlink objects
  *
- * The iterator can apply logical operations on bitsets on the fly, without
- * producing temporary bitsets.
+ * BitsetIterator is used for iterating over a result of applying a logical
+ * expression (@a struct bitset_expr) to a set of bitsets. The iterator applies
+ * this expression on the fly, without producing new temporary bitsets. On each
+ * iteration step (@a bitmap_iterator_next call) a next position where the
+ * expression evaluates to true is returned.
+ *
  * @see expr.h
  * @author Roman Tsisyk
  */
@@ -45,37 +49,36 @@
 #include "bitset.h"
 #include "expr.h"
 
-/**
- * BitsetIterator object
- * Iterator can be used for iterating over bits in a bitset of group of bitsets.
- */
+/** BitsetIterator object **/
 struct bitset_iterator;
 
 /**
- * @brief Allocates new iterator
- * After creation the iterator must be initialed using
- * @a bitset_iterator_set_expr method.
- * @return pointer to a bitset_iterator object on success or NULL otherwise
+ * @brief Creates a new iterator object
+ * The created iterator must be initialized using
+ * @link bitset_iterator_set_expr @endlink method.
+ * @return pointer to the bitset_iterator object on success or NULL otherwise
  */
 struct bitset_iterator *
 bitset_iterator_new(void);
 
 /**
- * @brief Destroys thee iterator
- * @param pit pointer to object
+ * @brief Destroys the @a it object
+ * @param it object
  * @see bitset_iterator_new
  */
 void
 bitset_iterator_delete(struct bitset_iterator *it);
 
 /**
- * @brief Initializer interator from the @a expr.
+ * @brief Initialize the @a it using the @a expr.
  *
- * @a expr object is not copied and must exist during the iterator lifetime.
+ * @a expr object is not copied and must be valid during the iterator lifetime.
  * You can use same @a expr in multiple iterators. You can modify and reuse
  * existing @a expr if no active iterators uses it.
- * @todo group.post_op != OP_NULL is not implemented yet
- * @todo group.reduce_op != OP_AND, OP_OR, OP_XOR is not implmented yet
+ *
+ * @todo Expressions with group.post_op != OP_NULL are not implemented yet
+ * @todo Expressions with group.reduce_op != OP_AND, OP_OR, OP_XOR
+ * are not implmented yet
  *
  * @param it object
  * @param expr expression
@@ -87,9 +90,9 @@ bitset_iterator_set_expr(struct bitset_iterator *it,
 			 struct bitset_expr *expr);
 
 /**
- * @brief Returns a pointer to current iterator expression
+ * @brief Returns a pointer to the current @a it expression
  * @param it object
- * @return A pointer to current iterator expression
+ * @return A pointer to the current @a it expression
  * @note Expression must not be changed if the iterator is active.
  * @see bitset_iterator_set_expr
  */
@@ -97,7 +100,7 @@ struct bitset_expr *
 bitset_iterator_get_expr(struct bitset_iterator *it);
 
 /**
- * @brief Rewinds the iterator to the start position.
+ * @brief Rewinds the @a it to the start position.
  * @param it object
  * @see bitset_iterator_set_expr
  */
@@ -105,10 +108,11 @@ void
 bitset_iterator_rewind(struct bitset_iterator *it);
 
 /**
- * @brief Moves iterator to next position.
+ * @brief Moves @a it to a next position
  * @see bitset_iterator_set_expr
  * @param it object
- * @return offset where next bit is set or SIZE_MAX if no more bits
+ * @return a next offset where the expression evaluates to true or
+ * SIZE_MAX if there is no more elements
  */
 size_t
 bitset_iterator_next(struct bitset_iterator *it);

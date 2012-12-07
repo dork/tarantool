@@ -261,12 +261,13 @@ static bool
 bitset_get_from_page(struct bitset_page *page, size_t pos);
 
 struct bitset *
-bitset_new(void)
+bitset_new()
 {
 	struct bitset *bitset = calloc(1, sizeof(*bitset));
 	if (bitset == NULL)
 		return NULL;
 
+	/* Initialize the pages tree */
 	RB_INIT(&(bitset->pages));
 
 	return bitset;
@@ -278,7 +279,7 @@ bitset_delete(struct bitset *bitset)
 	if (bitset == NULL)
 		return;
 
-	/* Cleanup pages */
+	/* Cleanup the pages tree */
 	struct bitset_page *page = NULL, *next = NULL;
 	RB_FOREACH_SAFE(page, bitset_pages_tree, &(bitset->pages), next) {
 		RB_REMOVE(bitset_pages_tree, &(bitset->pages), page);
@@ -297,12 +298,12 @@ bitset_get(struct bitset *bitset, size_t pos)
 	struct bitset_page key;
 	key.first_pos = bitset_page_first_pos(pos);
 
+	/* Find a page in the pages tree */
 	struct bitset_page *page = RB_FIND(bitset_pages_tree,
 					&(bitset->pages), &key);
 
-	if (page == NULL) {
+	if (page == NULL)
 		return false;
-	}
 
 	return bitset_get_from_page(page, pos - page->first_pos);
 }
@@ -323,12 +324,14 @@ bitset_set(struct bitset *bitset, size_t pos, bool val)
 	struct bitset_page key;
 	key.first_pos = bitset_page_first_pos(pos);
 
+
+	/* Find a page in the pages tree */
 	struct bitset_page *page = RB_FIND(bitset_pages_tree,
 					&(bitset->pages), &key);
 
 	if (page == NULL) {
 		if (!val) {
-			/* trying to unset bit, but page does not exist */
+			/* trying to unset bit, but a page is not found */
 			return 0;
 		}
 
@@ -343,6 +346,8 @@ bitset_set(struct bitset *bitset, size_t pos, bool val)
 		memset(page, 0, sizeof(*page));
 
 		page->first_pos = key.first_pos;
+
+		/* Insert a new page */
 		RB_INSERT(bitset_pages_tree,
 			  &(bitset->pages), page);
 	}
@@ -350,7 +355,7 @@ bitset_set(struct bitset *bitset, size_t pos, bool val)
 	if (bitset_get_from_page(page, pos - page->first_pos) != val) {
 		bitset_set_in_page(page, pos - page->first_pos, val);
 
-		/* update size counter of the bitset */
+		/* Update size counter of the bitset */
 		if (val) {
 			bitset->cardinality++;
 		} else {

@@ -32,7 +32,8 @@
 
 /**
  * @file
- * @brief Bit index.
+ * @brief BitsetIndex -- an implementation of bit index based on
+ * @link bitset.h bitset @endlink.
  * @see bitset.h
  * @author Roman Tsisyk
  */
@@ -42,43 +43,46 @@
 #include "bitset.h"
 #include "iterator.h"
 
+/** @brief Bitset Object **/
 struct bitset_index;
 
 /**
- * @brief Creates new index object
- * @return zero on success and non-zero otherwise
+ * @brief Creates a new bitset index object
+ * @return pointer to the new object on success or NULL otherwise
  */
 struct bitset_index *
 bitset_index_new(void);
 
 /**
  * @copydoc bitset_index_new
- * @param initial_size initial number of bitsets
+ * @param initial_size initial number of bitsets in the new index
  */
 struct bitset_index *
 bitset_index_new2(size_t initial_size);
 
 /**
- * @brief Destroy an @a index object created by @a bitset_index_new
+ * @brief Destroys the @a index object created by @a bitset_index_new
  * @param index object
  */
 void
 bitset_index_delete(struct bitset_index *index);
 
 /**
- * @brief Inserts (key, value) pair into the index.
+ * @brief Inserts (@a key, @a value) pair into the index.
+ * Only one pair with same value can exist in the index.
+ * If pair with same @a value is exist, it will be updated quietly.
  * @param index object
  * @param key key
- * @param key_size size of key
+ * @param key_size size of the key
  * @param value value
  * @return zero on success and non-zero otherwise
  */
-int bitset_index_insert(struct bitset_index *index,
-			void *key, size_t key_size,
-			size_t value);
+int
+bitset_index_insert(struct bitset_index *index, void *key, size_t key_size,
+		    size_t value);
 
 /**
- * @brief Removes (key, value) pair from the index.
+ * @brief Removes a (*, @a value) pair from the index.
  * @param index object
  * @param value value
  */
@@ -86,9 +90,9 @@ void
 bitset_index_remove_value(struct bitset_index *index, size_t value);
 
 /**
- * @brief Iteration over all elements in the index.
- * Initialized @a expr can be used with @a bitset_iterator_init function.
- * @param index
+ * @brief Initialize @a expr to iterate over all elements in the @a index.
+ * Initialized @a expr can be used with @link bitset_iterator_set_expr @endlink.
+ * @param index object
  * @param expr expression
  * @return zero on success and non-zero otherwise
  * @see expr.h
@@ -98,13 +102,14 @@ bitset_index_iterate_all(struct bitset_index *index,
 			 struct bitset_expr *expr);
 
 /**
- * @brief Equals iteration. Matches all pairs in the index, where
- * @a key exacttly equals pair.key ((@a key == pair.key).
- * Initialized @a expr can be used with @a bitset_iterator_init function.
- * @param index
+ * @brief Initialize @a expr to iterate over all elements in the @a index.
+ * **Equals algorithm.** Matches all pairs in the @a index, where @a key
+ * exactly equals pair.key (@a key == pair.key).
+ * Initialized @a expr can be used with @link bitset_iterator_set_expr @endlink.
+ * @param index object
  * @param expr expression
  * @param key key
- * @param key_size size of key
+ * @param key_size size of the key
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
@@ -114,13 +119,14 @@ bitset_index_iterate_equals(struct bitset_index *index,
 			    void *key, size_t key_size);
 
 /**
- * @brief All-Bits-Set iteration. Matches all pairs in the index, where
- * all bits from @a key is set in pair.key ((@a key & pair.key) != @a key).
- * Initialized @a expr can be used with @a bitset_iterator_init function.
- * @param index
+ * @brief Initialize @a expr to iterate over all elements in the @a index.
+ * **All-Bits-Set algorithm.** Matches all pairs in the @a index, where all bits
+ * from @a key is set in pair.key ((@a key & pair.key) == @a key).
+ * Initialized @a expr can be used with @link bitset_iterator_set_expr @endlink.
+ * @param index object
  * @param expr expression
  * @param key key
- * @param key_size size of key
+ * @param key_size size of the key
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
@@ -130,13 +136,14 @@ bitset_index_iterate_all_set(struct bitset_index *index,
 			     void *key, size_t key_size);
 
 /**
- * @brief All-Bits-Not-Set iteration. Matches all pairs in the index, where
- * all bits from @a key is not set in pair.key ((@a key & pair.key) != @a key).
- * Initialized @a expr can be used with @a bitset_iterator_init function.
- * @param index
+ * @brief Initialize @a expr to iterate over all elements in the @a index.
+ * **All-Bits-Not-Set algorithm.** Matches all pairs in the @a index, where all
+ * bits from the @a key is not set in pair.key ((@a key & pair.key) != @a key).
+ * Initialized @a expr can be used with @link bitset_iterator_set_expr @endlink.
+ * @param index object
  * @param expr expression
  * @param key key
- * @param key_size size of key
+ * @param key_size size of the key
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
@@ -146,13 +153,14 @@ bitset_index_iterate_all_not_set(struct bitset_index *index,
 				 void *key, size_t key_size);
 
 /**
- * @brief Any-Bits-Set iteration. Matches all pairs in the index, where
- * at least on bit from @a key is set in pair.key ((@a key & pair.key) != 0).
- * Initialized @a expr can be used with @a bitset_iterator_init function.
+ * @brief Initialize @a expr to iterate over all elements in the index.
+ * **Any-Bits-Set algorithm.** Matches all pairs in the @a index, where at least
+ * one bit from the @a key is set in pair.key ((@a key & pair.key) != 0).
+ * Initialized @a expr can be used with @link bitset_iterator_set_expr @endlink.
  * @param index object
  * @param expr expression
  * @param key key
- * @param key_size size of key
+ * @param key_size size of the key
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
@@ -163,13 +171,14 @@ bitset_index_iterate_any_set(struct bitset_index *index,
 
 
 /**
- * @brief Any-Bits-Not-Set iteration. Matches all pairs in the index, where
- * at least on bit from @a key is not set in pair.key ((@a key & pair.key) != 0).
- * Initialized @a expr can be used with @a bitset_iterator_init function.
+ * @brief Initialize @a expr to iterate over all elements in the index.
+ * **Any-Bits-Not-Set algorithm.** Matches all pairs in the @a index, where at
+ * least one bit from the @a key isn't set in pair.key ((@a key & pair.key)==0).
+ * Initialized @a expr can be used with @link bitset_iterator_set_expr @endlink.
  * @param index object
  * @param expr expression
  * @param key key
- * @param key_size size of key
+ * @param key_size size of the key
  * @return zero on success and non-zero otherwise
  * @see expr.h
  */
@@ -179,18 +188,18 @@ bitset_index_iterate_any_not_set(struct bitset_index *index,
 				 void *key, size_t key_size);
 
 /**
- * @brief Checks if a pairs with @a value exists in the index
+ * @brief Checks if a (*, @a value) pair is exist in the @a index
  * @param index object
  * @param value
- * @return true if the index contains pair with the @a value
+ * @return true if the @a index contains pair with the @a value
  */
 bool
 bitset_index_contains_value(struct bitset_index *index, size_t value);
 
 /**
- * @brief Returns number of pairs in the index.
+ * @brief Returns a number of pairs in the @a index.
  * @param index object
- * @return number of pairs in this index
+ * @return number of pairs in the @a index
  */
 size_t
 bitset_index_size(struct bitset_index *index);

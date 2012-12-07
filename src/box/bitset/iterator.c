@@ -46,6 +46,7 @@ struct bitset_itstate {
 	size_t groups_capacity;
 };
 
+/* like bitset_expr_group */
 struct bitset_itstate_group {
 	/** number of allocated elements in the state */
 	size_t elements_capacity;
@@ -60,7 +61,9 @@ struct bitset_iterator {
 	struct bitset_itstate state;
 
 	size_t cur_pos;
-	int indexes[BITSET_WORD_BIT + 1]; /* used for word_index */
+	/* temporary buffer for word_index data */
+	int indexes[BITSET_WORD_BIT + 1];
+	/* position in the indexes buffer */
 	int indexes_pos;
 };
 
@@ -673,12 +676,9 @@ next_word_in_bitset(struct bitset *bitset,
 		*word = word_set_ones();
 	} else {
 		/*
-		 * We look for first page with first_pos >= *poffset.
-		 * Since we does not found page where first_pos == *poffset,
+		 * We look for a first page with first_pos >= *poffset.
+		 * Since we haven't found a page where first_pos == *poffset,
 		 * we can add some hints here in order to speedup upper levels.
-		 *
-		 * Next time upper levels would call this method with
-		 * *poffset >= page->first_pos;
 		 */
 
 		*poffset = page->first_pos;

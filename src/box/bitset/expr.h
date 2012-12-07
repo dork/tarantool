@@ -71,17 +71,17 @@ enum bitset_unary_op {
  */
 enum bitset_binary_op {
 	/** bitwise AND */
-	BITSET_OP_AND   = 0x1 << 8,
+	BITSET_OP_AND,
 	/** bitwise NOT AND */
-	BITSET_OP_NAND  = 0x2 << 8,
+	BITSET_OP_NAND,
 	/** bitwise OR */
-	BITSET_OP_OR    = 0x3 << 8,
+	BITSET_OP_OR,
 	/** bitwise NOT OR */
-	BITSET_OP_NOR   = 0x4 << 8,
+	BITSET_OP_NOR,
 	/** bitwise XOR */
-	BITSET_OP_XOR   = 0x5 << 8,
+	BITSET_OP_XOR,
 	/** bitwise NOT XOR */
-	BITSET_OP_XNOR  = 0x6 << 8
+	BITSET_OP_XNOR
 };
 
 struct bitset_expr;
@@ -94,15 +94,15 @@ struct bitset_expr *
 bitset_expr_new(void);
 
 /**
- * @brief Destroy @expr object
- * @param expr
+ * @brief Destroy @a expr object
+ * @param expr object
  */
 void
 bitset_expr_delete(struct bitset_expr *expr);
 
 
 /**
- * @brief Clear @a expression (remove all groups)
+ * @brief Clear @a expr (removes all groups from it)
  * @param expr object
  */
 void
@@ -110,7 +110,7 @@ bitset_expr_clear(struct bitset_expr *expr);
 
 
 /**
- * @brief Add a new group to @a expression.
+ * @brief Add a new group to @a expr.
  * Resulting group is look like (post_op (b1 reduce_op ~b2 reduce_op b3)).
  * @param expr object
  * @param reduce_op operation applied to pairs of bitsets in the expr
@@ -124,16 +124,16 @@ bitset_expr_add_group(struct bitset_expr *expr,
 		      enum bitset_unary_op post_op);
 
 /**
- * @brief Returns number of groups in the @a expr
+ * @brief Returns a number of groups in the @a expr
  * @param expr object
- * @return number of groups in the @a expr
+ * @return a number of groups in the @a expr
  */
 size_t
 bitset_expr_size(struct bitset_expr *expr);
 
 
 /**
- * @brief Adds @a bitset to group with id @a group_id
+ * @brief Adds @a bitset to a group with id @a group_id
  * @param expr object
  * @param group_id group identifier
  * @param bitset bitset
@@ -147,7 +147,7 @@ bitset_expr_group_add_bitset(struct bitset_expr *expr,
 			     enum bitset_unary_op pre_op);
 
 /**
- * @brief Clear group with identifier = @a group_id
+ * @brief Clear a group with id @a group_id
  * @param expr object
  * @param group_id  group identifier
  */
@@ -156,10 +156,10 @@ bitset_expr_group_clear(struct bitset_expr *expr,
 			size_t group_id);
 
 /**
- * @brief Returns number of bitsets in the @a group
+ * @brief Returns a number of bitsets in the @a group
  * @param expr object
  * @param group_id group identifier
- * @return Number of bitsets in the @a group
+ * @return a number of bitsets in the @a group
  */
 size_t
 bitset_expr_group_size(struct bitset_expr *expr,
