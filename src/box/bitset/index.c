@@ -176,6 +176,27 @@ bitset_index_contains_value(struct bitset_index *index, size_t value)
 }
 
 int
+bitset_index_iterate_all(struct bitset_index *index,
+			 struct bitset_expr *expr)
+{
+	assert (index != NULL);
+	assert (expr != NULL);
+
+	bitset_expr_clear(expr);
+
+	if (bitset_expr_add_group(expr, BITSET_OP_AND, BITSET_OP_NULL) != 0) {
+		return -1;
+	}
+
+	if (bitset_expr_group_add_bitset(expr, 0, index->bitsets[0],
+					 BITSET_OP_NULL) != 0) {
+		return -1;
+	}
+
+	return 0;
+}
+
+int
 bitset_index_iterate_equals(struct bitset_index *index,
 			    struct bitset_expr *expr,
 			    void *key, size_t key_size)

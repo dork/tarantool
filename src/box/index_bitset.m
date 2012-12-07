@@ -342,8 +342,7 @@ iterator_wrapper_next(struct iterator *iterator)
 	int rc = 0;
 	switch (type) {
 	case ITER_ALL:
-		bitset_expr_clear(it->bitset_expr);
-		rc = 0;
+		rc = bitset_index_iterate_all(index, it->bitset_expr);
 		break;
 	case ITER_EQ:
 		rc = bitset_index_iterate_equals(

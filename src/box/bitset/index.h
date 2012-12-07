@@ -86,6 +86,18 @@ void
 bitset_index_remove_value(struct bitset_index *index, size_t value);
 
 /**
+ * @brief Iteration over all elements in the index.
+ * Initialized @a expr can be used with @a bitset_iterator_init function.
+ * @param index
+ * @param expr expression
+ * @return zero on success and non-zero otherwise
+ * @see expr.h
+ */
+int
+bitset_index_iterate_all(struct bitset_index *index,
+			 struct bitset_expr *expr);
+
+/**
  * @brief Equals iteration. Matches all pairs in the index, where
  * @a key exacttly equals pair.key ((@a key == pair.key).
  * Initialized @a expr can be used with @a bitset_iterator_init function.
