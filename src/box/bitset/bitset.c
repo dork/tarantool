@@ -324,32 +324,34 @@ bitset_set(struct bitset *bitset, size_t pos, bool val)
 	struct bitset_page key;
 	key.first_pos = bitset_page_first_pos(pos);
 
-
 	/* Find a page in the pages tree */
 	struct bitset_page *page = RB_FIND(bitset_pages_tree,
 					&(bitset->pages), &key);
 
 	if (page == NULL) {
 		if (!val) {
-			/* trying to unset bit, but a page is not found */
+			/* trying to unset bit, but the page is not found */
 			return 0;
 		}
 
-		/* resize bitset */
+		/* Add a new page */
 
-		/* align pages for SSE/AVX */
-		page = memalign(BITSET_WORD_ALIGNMENT,
-				sizeof(struct bitset_page));
-		if (page == NULL) {
+#if (BITSET_WORD_ALIGNMENT != CHAR_BIT)
+		/* Align pages for SSE/AVX */
+		if (posix_memalign((void **) &page, BITSET_WORD_ALIGNMENT,
+				   sizeof(*page)) != 0)
 			return -1;
-		}
+#else
+		page = malloc(sizeof(*page));
+		if (page == NULL)
+			return -1;
+#endif
 		memset(page, 0, sizeof(*page));
 
 		page->first_pos = key.first_pos;
 
-		/* Insert a new page */
-		RB_INSERT(bitset_pages_tree,
-			  &(bitset->pages), page);
+		/* Insert the new page into the pages tree */
+		RB_INSERT(bitset_pages_tree, &(bitset->pages), page);
 	}
 
 	if (bitset_get_from_page(page, pos - page->first_pos) != val) {

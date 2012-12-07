@@ -69,7 +69,7 @@ typedef u128 bitset_word_t;
 #else /* !defined(ENABLE_SSE2) && !defined(ENABLE_AVX) */
 typedef size_t bitset_word_t; /* is always size_t if sse is disabled */
 #define __BITSET_WORD_BIT (__SIZEOF_SIZE_T__ * CHAR_BIT)
-#define BITSET_WORD_ALIGNMENT 8
+#define BITSET_WORD_ALIGNMENT CHAR_BIT
 #endif
 
 /** Number of bits in one word */
