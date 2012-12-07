@@ -72,29 +72,28 @@ iterator_wrapper(struct iterator *it)
 	return (struct iterator_wrapper *) it;
 }
 
-struct tuple *
-iterator_wrapper_next(struct iterator *iterator)
-{
-	assert(iterator->next == iterator_wrapper_next);
-	struct iterator_wrapper *it = iterator_wrapper(iterator);
-	size_t value = bitset_iterator_next(it->bitset_it);
-
-	if (value == SIZE_MAX) {
-		return NULL;
-	} else {
-		return value_to_tuple(value);
-	}
-}
-
 void
 iterator_wrapper_free(struct iterator *iterator)
 {
-	assert(iterator->next == iterator_wrapper_next);
+	assert(iterator->free == iterator_wrapper_free);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
 
 	bitset_iterator_delete(it->bitset_it);
 	bitset_expr_delete(it->bitset_expr);
 	free(it);
+}
+
+struct tuple *
+iterator_wrapper_next(struct iterator *iterator)
+{
+	assert(iterator->free == iterator_wrapper_free);
+	struct iterator_wrapper *it = iterator_wrapper(iterator);
+
+	size_t value = bitset_iterator_next(it->bitset_it);
+	if (value == SIZE_MAX)
+		return NULL;
+
+	return value_to_tuple(value);
 }
 
 @implementation BitsetIndex;
@@ -106,8 +105,6 @@ iterator_wrapper_free(struct iterator *iterator)
 
 - (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg
 {
-	say_info("BitsetIndex: init");
-
 	position_expr = bitset_expr_new();
 	if (position_expr == NULL) {
 		tnt_raise(SystemError, :"bitset_expr_new: %s",
@@ -338,7 +335,7 @@ iterator_wrapper_free(struct iterator *iterator)
 		check_key_parts(key_def, part_count,
 				bitset_index_traits.allows_partial_key);
 		void *key2 = key;
-		bitset_key_size = (size_t) load_varint32(&key);
+		bitset_key_size = (size_t) load_varint32(&key2);
 		bitset_key = key2;
 	}
 
