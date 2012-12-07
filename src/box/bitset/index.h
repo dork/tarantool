@@ -80,14 +80,10 @@ int bitset_index_insert(struct bitset_index *index,
 /**
  * @brief Removes (key, value) pair from the index.
  * @param index object
- * @param key key
- * @param key_size size of key
  * @param value value
- * @return zero on success and non-zero otherwise
  */
-int bitset_index_remove(struct bitset_index *index,
-			void *key, size_t key_size,
-			size_t value);
+void
+bitset_index_remove_value(struct bitset_index *index, size_t value);
 
 /**
  * @brief Equals iteration. Matches all pairs in the index, where

@@ -306,11 +306,7 @@ iterator_wrapper_free(struct iterator *iterator)
 		say_debug("BitsetIndex: remove value = %zu (%p)",
 			  value, old_tuple);
 #endif
-		if (bitset_index_remove(index,bitset_key, bitset_key_size,
-					value) < 0) {
-			tnt_raise(SystemError, :"bitset_index_remove: %s",
-				strerror(errno));
-		}
+		bitset_index_remove_value(index, value);
 	}
 
 	if (new_tuple != NULL) {

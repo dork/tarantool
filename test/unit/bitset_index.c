@@ -133,8 +133,7 @@ void test_all_set()
 	printf("Removing random pairs... ");
 	for(size_t i = 0; i < SET_SIZE; i++) {
 		if (rand() % 5 == 0) {
-			bitset_index_remove(index, &(keys[i]),
-					    sizeof(keys[i]), values[i]);
+			bitset_index_remove_value(index, values[i]);
 			keys[i] = SIZE_MAX;
 		}
 	}
