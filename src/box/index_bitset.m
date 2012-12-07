@@ -287,27 +287,16 @@ iterator_wrapper_free(struct iterator *iterator)
 	}
 }
 
-- (void) replace: (struct tuple *) old_tuple
-	:(struct tuple *) new_tuple
+- (struct tuple *) replace: (struct tuple *) old_tuple
+	: (struct tuple *) new_tuple
+	: (u32) flags
 {
-	void *bitset_key;
-	size_t bitset_key_size;
-	size_t value;
+	(void) flags;
 
-	if (old_tuple != NULL) {
-		void *field = tuple_field(old_tuple, key_def->parts[0].fieldno);
-		if (unlikely(field == NULL))
-			tnt_raise(ClientError, :ER_NO_SUCH_FIELD,
-				  key_def->parts[0].fieldno);
+	assert (old_tuple != NULL || new_tuple != NULL);
+	assert (!key_def->is_unique);
 
-		make_bitset_key(field, &bitset_key, &bitset_key_size);
-		value = tuple_to_value(old_tuple);
-#ifdef DEBUG
-		say_debug("BitsetIndex: remove value = %zu (%p)",
-			  value, old_tuple);
-#endif
-		bitset_index_remove_value(index, value);
-	}
+	struct tuple *ret = NULL;
 
 	if (new_tuple != NULL) {
 		void *field = tuple_field(new_tuple, key_def->parts[0].fieldno);
@@ -315,24 +304,52 @@ iterator_wrapper_free(struct iterator *iterator)
 			tnt_raise(ClientError, :ER_NO_SUCH_FIELD,
 				  key_def->parts[0].fieldno);
 
+		void *bitset_key;
+		size_t bitset_key_size;
 		make_bitset_key(field, &bitset_key, &bitset_key_size);
-		value = tuple_to_value(new_tuple);
 
+		size_t value = tuple_to_value(new_tuple);
 #ifdef DEBUG
 		say_debug("BitsetIndex: insert value = %zu (%p)",
 			  value, new_tuple);
 #endif
-		if (bitset_index_insert(index,bitset_key, bitset_key_size,
+		if (bitset_index_insert(index, bitset_key, bitset_key_size,
 					value) < 0) {
 			tnt_raise(SystemError, :"bitset_index_insert: %s",
 				strerror(errno));
 		}
 	}
+
+	if (old_tuple != NULL) {
+		size_t value = tuple_to_value(old_tuple);
+#ifdef DEBUG
+		say_debug("BitsetIndex: remove value = %zu (%p)",
+			  value, old_tuple);
+#endif
+		if (bitset_index_contains_value(index, value)) {
+			ret = old_tuple;
+
+			assert (old_tuple != new_tuple);
+			bitset_index_remove_value(index, value);
+		}
+	}
+
+	return ret;
+}
+
+/*
+ * TODO: remove these methods after merging "index-speedup" branch
+ */
+
+- (void) replace: (struct tuple *) old_tuple
+	:(struct tuple *) new_tuple
+{
+	[self replace: old_tuple: new_tuple: 0];
 }
 
 - (void) remove: (struct tuple *) tuple
 {
-	return [self replace :tuple :NULL];
+	[self replace: tuple: NULL: 0];
 }
 
 - (void) initIterator: (struct iterator *) iterator
