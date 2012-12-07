@@ -91,14 +91,14 @@ struct bitset_expr;
  * @return Pointer to expression object or NULL if memory allocation has failed
  */
 struct bitset_expr *
-bitset_expr_new();
+bitset_expr_new(void);
 
 /**
  * @brief Destroy @expr object
  * @param expr
  */
 void
-bitset_expr_free(struct bitset_expr *expr);
+bitset_expr_delete(struct bitset_expr *expr);
 
 
 /**

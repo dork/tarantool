@@ -117,8 +117,8 @@ iterator_wrapper_free(struct iterator *iterator)
 	assert(iterator->next == iterator_wrapper_next);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
 
-	bitset_iterator_free(&(it->bitset_it));
-	bitset_expr_free(it->bitset_expr);
+	bitset_iterator_delete(it->bitset_it);
+	bitset_expr_delete(it->bitset_expr);
 	free(it);
 }
 
@@ -155,8 +155,9 @@ iterator_wrapper_free(struct iterator *iterator)
 			break;
 		}
 
-		if (bitset_index_new(&index, size) < 0) {
-			bitset_expr_free(position_expr);
+		index = bitset_index_new2(size);
+		if (unlikely(!index)) {
+			bitset_expr_delete(position_expr);
 			tnt_raise(SystemError, :"bitset_index_new: %s",
 				strerror(errno));
 		}
@@ -166,8 +167,8 @@ iterator_wrapper_free(struct iterator *iterator)
 
 - (void) free
 {
-	bitset_expr_free(position_expr);
-	bitset_index_free(&index);
+	bitset_expr_delete(position_expr);
+	bitset_index_delete(index);
 	[super free];
 }
 
@@ -226,24 +227,26 @@ iterator_wrapper_free(struct iterator *iterator)
 - (struct iterator *) allocIterator
 {
 	struct iterator_wrapper *it = malloc(sizeof(struct iterator_wrapper));
-	if (it) {
-		memset(it, 0, sizeof(struct iterator_wrapper));
-		it->base.next = iterator_wrapper_next;
-		it->base.free = iterator_wrapper_free;
+	if (!it)
+		return NULL;
 
-		it->bitset_expr = bitset_expr_new();
-		if (it->bitset_expr == NULL) {
-			tnt_raise(SystemError, :"bitset_expr_new: %s",
-				strerror(errno));
-		}
+	memset(it, 0, sizeof(struct iterator_wrapper));
+	it->base.next = iterator_wrapper_next;
+	it->base.free = iterator_wrapper_free;
 
-		if (bitset_iterator_new(&it->bitset_it) != 0) {
-			bitset_expr_free(it->bitset_expr);
-			tnt_raise(SystemError, :"bitset_iterator_new: %s",
-				strerror(errno));
-		}
-
+	it->bitset_expr = bitset_expr_new();
+	if (unlikely(!it->bitset_expr)) {
+		free(it);
+		tnt_raise(SystemError, :"bitset_expr_new: %s", strerror(errno));
 	}
+
+	it->bitset_it = bitset_iterator_new();
+	if (unlikely(!it->bitset_it)) {
+		bitset_expr_delete(it->bitset_expr);
+		free(it);
+		tnt_raise(SystemError, :"bitset_iterator_new: %s", strerror(errno));
+	}
+
 	return (struct iterator *) it;
 }
 

@@ -83,11 +83,10 @@ error_0:
 }
 
 void
-bitset_expr_free(struct bitset_expr *expr)
+bitset_expr_delete(struct bitset_expr *expr)
 {
-	if (expr == NULL) {
+	if (!expr)
 		return;
-	}
 
 	for (size_t g = 0; g < expr->groups_capacity; g++) {
 		free(expr->groups[g]);

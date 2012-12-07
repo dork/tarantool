@@ -92,7 +92,7 @@ typedef size_t bitset_word_t; /* is always size_t if sse is disabled */
 /* TODO(roman): implement word_xxx methods using SSE2 */
 
 static inline bitset_word_t
-word_set_zeros()
+word_set_zeros(void)
 {
 #if defined(ENABLE_AVX)
 	return _mm256_setzero_si256();
@@ -104,7 +104,7 @@ word_set_zeros()
 }
 
 static inline bitset_word_t
-word_set_ones()
+word_set_ones(void)
 {
 #if defined(ENABLE_AVX)
 	return _mm256_setr_epi32(-1, -1, -1, -1, -1, -1, -1, -1);

@@ -46,17 +46,24 @@ struct bitset_index;
 
 /**
  * @brief Creates new index object
- * @param pindex
- * @param initial_size initial number of used bitsets
  * @return zero on success and non-zero otherwise
  */
-int bitset_index_new(struct bitset_index **pindex, size_t initial_size);
+struct bitset_index *
+bitset_index_new(void);
 
 /**
- * @brief Destroys index object
- * @param pindex
+ * @copydoc bitset_index_new
+ * @param initial_size initial number of bitsets
  */
-void bitset_index_free(struct bitset_index **pindex);
+struct bitset_index *
+bitset_index_new2(size_t initial_size);
+
+/**
+ * @brief Destroy an @a index object created by @a bitset_index_new
+ * @param index object
+ */
+void
+bitset_index_delete(struct bitset_index *index);
 
 /**
  * @brief Inserts (key, value) pair into the index.

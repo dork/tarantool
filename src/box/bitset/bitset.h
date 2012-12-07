@@ -49,15 +49,15 @@ struct bitset;
  * @brief Allocates and construct new bitset and sets value of *pbitset.
  * @param pbitset
  */
-int
-bitset_new(struct bitset **pbitset);
+struct bitset *
+bitset_new(void);
 
 /**
  * @brief Destruct and deallocates bitsets and sets *pbitset to NULL.
  * @param pbitset
  */
 void
-bitset_free(struct bitset **pbitset);
+bitset_delete(struct bitset *bitset);
 
 /**
  * @brief Gets a bit from the bitset

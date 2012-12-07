@@ -1,1 +1,1 @@
-run_test("bitmap_index")
+run_test("bitset_index")

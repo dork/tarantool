@@ -12,8 +12,8 @@ void test_cardinality()
 {
 	header();
 
-	struct bitset *bm;
-	bitset_new(&bm);
+	struct bitset *bm = bitset_new();
+	fail_unless(bm);
 
 	fail_unless(bitset_cardinality(bm) == 0);
 
@@ -48,7 +48,7 @@ void test_cardinality()
 	cnt--;
 	fail_unless(bitset_cardinality(bm) == cnt);
 
-	bitset_free(&bm);
+	bitset_delete(bm);
 
 	footer();
 }
@@ -88,8 +88,8 @@ void test_get_set()
 {
 	header();
 
-	struct bitset *bm;
-	bitset_new(&bm);
+	struct bitset *bm = bitset_new();
+	fail_unless(bm);
 
 	const size_t NUM_SIZE = (size_t) 1 << 14;
 	size_t *nums = malloc(NUM_SIZE * sizeof(size_t));
@@ -174,7 +174,7 @@ void test_get_set()
 	}
 	printf("ok\n");
 
-	bitset_free(&bm);
+	bitset_delete(bm);
 
 	footer();
 }

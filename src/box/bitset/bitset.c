@@ -260,37 +260,32 @@ bitset_set_in_page(struct bitset_page *page, size_t pos, bool val);
 static bool
 bitset_get_from_page(struct bitset_page *page, size_t pos);
 
-int
-bitset_new(struct bitset **pbitset)
+struct bitset *
+bitset_new(void)
 {
-	*pbitset = calloc(1, sizeof(struct bitset));
-	if (*pbitset == NULL) {
-		return -1;
-	}
+	struct bitset *bitset = calloc(1, sizeof(*bitset));
+	if (bitset == NULL)
+		return NULL;
 
-	struct bitset *bitset = *pbitset;
 	RB_INIT(&(bitset->pages));
 
-	return 0;
+	return bitset;
 }
 
 void
-bitset_free(struct bitset **pbitset)
+bitset_delete(struct bitset *bitset)
 {
-	struct bitset *bitset = *pbitset;
-	if (bitset != NULL) {
-		/* cleanup pages */
-		struct bitset_page *page = NULL, *next = NULL;
-		RB_FOREACH_SAFE(page, bitset_pages_tree,
-				&(bitset->pages), next) {
-			RB_REMOVE(bitset_pages_tree, &(bitset->pages), page);
-			free(page);
-		}
+	if (bitset == NULL)
+		return;
 
-		free(bitset);
+	/* Cleanup pages */
+	struct bitset_page *page = NULL, *next = NULL;
+	RB_FOREACH_SAFE(page, bitset_pages_tree, &(bitset->pages), next) {
+		RB_REMOVE(bitset_pages_tree, &(bitset->pages), page);
+		free(page);
 	}
 
-	*pbitset = NULL;
+	free(bitset);
 }
 
 

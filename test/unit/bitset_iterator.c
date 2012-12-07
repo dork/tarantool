@@ -29,8 +29,8 @@ void test_empty()
 {
 	header();
 
-	struct bitset *bm1;
-	bitset_new(&bm1);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
 
 	bitset_set(bm1, 1, 1);
 	bitset_set(bm1, 2, 1);
@@ -42,8 +42,9 @@ void test_empty()
 	bitset_set(bm1, 16384, 1);
 	bitset_set(bm1, 16385, 1);
 
-	struct bitset *bm2;
-	bitset_new(&bm2);
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
+
 	bitset_set(bm2, 17, 1);
 	bitset_set(bm2, 194, 1);
 	bitset_set(bm2, 1023, 1);
@@ -59,18 +60,18 @@ void test_empty()
 	fail_unless(bitset_expr_group_add_bitset(expr,
 		0, bm2, BITSET_OP_NULL) == 0);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	size_t pos = bitset_iterator_next(it);
 	fail_unless(pos == SIZE_MAX);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }
@@ -80,13 +81,15 @@ void test_first()
 {
 	header();
 
-	struct bitset *bm1;
-	bitset_new(&bm1);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
+
 	bitset_set(bm1, 0, 1);
 	bitset_set(bm1, 1023, 1);
 
-	struct bitset *bm2;
-	bitset_new(&bm2);
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
+
 	bitset_set(bm2, 0, 1);
 	bitset_set(bm2, 1025, 1);
 
@@ -100,8 +103,8 @@ void test_first()
 	fail_unless(bitset_expr_group_add_bitset(expr,
 		0, bm2, BITSET_OP_NULL) == 0);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	size_t pos = bitset_iterator_next(it);
@@ -109,11 +112,11 @@ void test_first()
 	fail_unless(pos == 0);
 	fail_unless(bitset_iterator_next(it) == SIZE_MAX);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }
@@ -122,11 +125,11 @@ static
 void test_and() {
 	header();
 
-	struct bitset *bm1;
-	fail_if (bitset_new(&bm1) < 0);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
 
-	struct bitset *bm2;
-	fail_if (bitset_new(&bm2) < 0);
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
 
 	size_t *nums = malloc(sizeof(*nums) * NUM_SIZE);
 	fail_if(nums == NULL);
@@ -160,8 +163,8 @@ void test_and() {
 
 	qsort(nums, NUM_SIZE, sizeof(size_t), size_compator);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	for (size_t i = 0; i < NUM_SIZE; i++) {
@@ -174,11 +177,11 @@ void test_and() {
 
 	free(nums);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }
@@ -200,8 +203,8 @@ void test_and1() {
 	size_t **pnumbers = malloc(sizeof(*pnumbers) * BITSET_SIZE);
 
 	for(size_t b = 0; b < BITSET_SIZE; b++) {
-		struct bitset *bitset;
-		bitset_new(&bitset);
+		struct bitset *bitset = bitset_new();
+		fail_unless(bitset);
 		fail_unless(bitset_expr_group_add_bitset(expr,
 			0, bitset, BITSET_OP_NULL) == 0);
 		bitsets[b] = bitset;
@@ -227,8 +230,8 @@ void test_and1() {
 	printf("ok\n");
 
 	printf("Iterating... ");
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	size_t pos;
@@ -259,11 +262,11 @@ void test_and1() {
 	}
 	printf("ok\n");
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
 	for(size_t b = 0; b < BITSET_SIZE; b++) {
-		bitset_free(&(bitsets[b]));
+		bitset_delete(bitsets[b]);
 	}
 
 	for(size_t b = 0; b < BITSET_SIZE; b++) {
@@ -279,11 +282,11 @@ static
 void test_or() {
 	header();
 
-	struct bitset *bm1;
-	fail_if (bitset_new(&bm1) < 0);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
 
-	struct bitset *bm2;
-	fail_if (bitset_new(&bm2) < 0);
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
 
 	size_t *nums = malloc(sizeof(*nums) * NUM_SIZE);
 	fail_if(nums == NULL);
@@ -311,8 +314,8 @@ void test_or() {
 	fail_unless(bitset_expr_group_add_bitset(expr,
 		0, bm2, BITSET_OP_NULL) == 0);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	qsort(nums, NUM_SIZE, sizeof(size_t), size_compator);
@@ -333,11 +336,11 @@ void test_or() {
 
 	free(nums);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }
@@ -346,11 +349,11 @@ static
 void test_xor() {
 	header();
 
-	struct bitset *bm1;
-	fail_if (bitset_new(&bm1) < 0);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
 
-	struct bitset *bm2;
-	fail_if (bitset_new(&bm2) < 0);
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
 
 	size_t *nums = malloc(sizeof(*nums) * NUM_SIZE);
 	fail_if(nums == NULL);
@@ -382,8 +385,8 @@ void test_xor() {
 	fail_unless(bitset_expr_group_add_bitset(expr,
 		0, bm2, BITSET_OP_NULL) == 0);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	qsort(nums, NUM_SIZE, sizeof(size_t), size_compator);
@@ -401,11 +404,11 @@ void test_xor() {
 
 	free(nums);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }
@@ -414,11 +417,11 @@ static
 void test_intergroup() {
 	header();
 
-	struct bitset *bm1;
-	fail_if (bitset_new(&bm1) < 0);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
 
-	struct bitset *bm2;
-	fail_if (bitset_new(&bm2) < 0);
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
 
 	size_t *nums = malloc(sizeof(*nums) * NUM_SIZE);
 	fail_if(nums == NULL);
@@ -453,8 +456,8 @@ void test_intergroup() {
 	fail_unless(bitset_expr_group_add_bitset(expr,
 		1, bm2, BITSET_OP_NULL) == 0);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	qsort(nums, NUM_SIZE, sizeof(size_t), size_compator);
@@ -469,11 +472,11 @@ void test_intergroup() {
 
 	free(nums);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }
@@ -483,14 +486,14 @@ void test_op_not1() {
 	header();
 
 	size_t big_i = (size_t) 1 << 15;
-	struct bitset *bm1;
-	bitset_new(&bm1);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
 	bitset_set(bm1, 0, 1);
 	bitset_set(bm1, 11, 1);
 	bitset_set(bm1, 1024, 1);
 
-	struct bitset *bm2;
-	bitset_new(&bm2);
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
 	bitset_set(bm2, 0, 1);
 	bitset_set(bm2, 10, 1);
 	bitset_set(bm2, 11, 1);
@@ -507,8 +510,8 @@ void test_op_not1() {
 	fail_unless(bitset_expr_group_add_bitset(expr,
 		0, bm2, BITSET_OP_NULL) == 0);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 
 	size_t result[] = {10, 14, big_i};
@@ -521,11 +524,11 @@ void test_op_not1() {
 	}
 	fail_unless (pos = bitset_iterator_next(it) == SIZE_MAX);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }
@@ -543,7 +546,7 @@ void test_op_not2() {
 		fail_unless (pos == i);
 	}
 
-	bitset_iterator_free(&it);
+	bitset_iterator_delete(it);
 
 	footer();
 }
@@ -552,10 +555,11 @@ static
 void test_op_not3() {
 	header();
 
-	struct bitset *bm1;
-	bitset_new(&bm1);
-	struct bitset *bm2;
-	bitset_new(&bm2);
+	struct bitset *bm1 = bitset_new();
+	fail_unless(bm1);
+
+	struct bitset *bm2 = bitset_new();
+	fail_unless(bm2);
 
 	size_t result[] = {0, 15, 43243, 65536};
 	size_t result_size = 4;
@@ -583,10 +587,10 @@ void test_op_not3() {
 	pos = bitset_iterator_next(it);
 	fail_unless (pos == SIZE_MAX);
 
-	bitset_iterator_free(&it);
+	bitset_iterator_delete(it);
 
-	bitset_free(&bm1);
-	bitset_free(&bm2);
+	bitset_delete(bm1);
+	bitset_delete(bm2);
 
 	footer();
 }

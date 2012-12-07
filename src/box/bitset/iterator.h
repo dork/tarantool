@@ -55,11 +55,10 @@ struct bitset_iterator;
  * @brief Allocates new iterator
  * After creation the iterator must be initialed using
  * @a bitset_iterator_set_expr method.
- * @param pit pointer to object
- * @return zero on success and non-zero otherwise
+ * @return pointer to a bitset_iterator object on success or NULL otherwise
  */
-int
-bitset_iterator_new(struct bitset_iterator **pit);
+struct bitset_iterator *
+bitset_iterator_new(void);
 
 /**
  * @brief Destroys thee iterator
@@ -67,7 +66,7 @@ bitset_iterator_new(struct bitset_iterator **pit);
  * @see bitset_iterator_new
  */
 void
-bitset_iterator_free(struct bitset_iterator **pit);
+bitset_iterator_delete(struct bitset_iterator *it);
 
 /**
  * @brief Initializer interator from the @a expr.

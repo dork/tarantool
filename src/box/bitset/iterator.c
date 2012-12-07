@@ -145,11 +145,10 @@ next_word_in_bitset(struct bitset *bitset,
 		    struct bitset_page **ppage, size_t *poffset,
 		    int bitset_ops, bitset_word_t *word);
 
-int
-bitset_iterator_new(struct bitset_iterator **pit)
+struct bitset_iterator *
+bitset_iterator_new(void)
 {
-	int rc = -1;
-	struct bitset_iterator *it = calloc(1, sizeof(struct bitset_iterator));
+	struct bitset_iterator *it = calloc(1, sizeof(*it));
 	if (it == NULL) {
 		goto error_0;
 	}
@@ -176,8 +175,7 @@ bitset_iterator_new(struct bitset_iterator **pit)
 		it->state.groups[g] = group;
 	}
 
-	*pit = it;
-	return 0;
+	return it;
 
 error_2:
 	for (size_t g = 0; g < it->state.groups_capacity; g++) {
@@ -189,8 +187,21 @@ error_2:
 error_1:
 	free(it);
 error_0:
-	*pit = NULL;
-	return rc;
+	return NULL;
+}
+
+void
+bitset_iterator_delete(struct bitset_iterator *it)
+{
+	if (!it)
+		return;
+
+	for (size_t s = 0; s < it->state.groups_capacity; s++) {
+		assert(it->state.groups[s] != NULL);
+		free(it->state.groups[s]);
+	}
+	free(it->state.groups);
+	free(it);
 }
 
 #if !defined(NDEBUG)
@@ -253,22 +264,7 @@ bitset_iterator_get_expr(struct bitset_iterator *it)
 	return it->expr;
 }
 
-void
-bitset_iterator_free(struct bitset_iterator **pit)
-{
-	struct bitset_iterator *it = *pit;
 
-	if (it != NULL) {
-		for (size_t s = 0; s < it->state.groups_capacity; s++) {
-			assert(it->state.groups[s] != NULL);
-			free(it->state.groups[s]);
-		}
-		free(it->state.groups);
-		free(it);
-	}
-
-	*pit = NULL;
-}
 
 void
 bitset_iterator_rewind(struct bitset_iterator *it)

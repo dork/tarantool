@@ -12,18 +12,18 @@ void test_resize()
 {
 	header();
 
-	struct bitset_index *index;
-	bitset_index_new(&index, 0);
+	struct bitset_index *index = bitset_index_new();
+	fail_unless(index);
 
 	size_t key = 23411111;
 	size_t value = (size_t) index; // mostly random number
 
 	bitset_index_insert(index, &key, sizeof(key), value);
 
-	struct bitset_iterator *it;
+	struct bitset_iterator *it= bitset_iterator_new();
+	fail_unless(it);
 	struct bitset_expr *expr = bitset_expr_new();
-	fail_if(expr == NULL);
-	fail_unless(bitset_iterator_new(&it) == 0);
+	fail_unless(expr);
 
 	fail_unless(bitset_index_iterate_equals(index, expr,
 						&key, sizeof(key)) == 0);
@@ -31,10 +31,10 @@ void test_resize()
 	fail_unless(bitset_iterator_next(it) == value);
 	fail_unless(bitset_iterator_next(it) == SIZE_MAX);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_index_free(&index);
+	bitset_index_delete(index);
 
 	footer();
 }
@@ -45,10 +45,9 @@ void test_size()
 	size_t key = 656906;
 	header();
 
-	struct bitset_index *index;
-	bitset_index_new(&index, sizeof(size_t) * CHAR_BIT);
-
-	fail_unless(bitset_index_size(index) == 0);
+	struct bitset_index *index = bitset_index_new2(
+				sizeof(size_t) * CHAR_BIT);
+	fail_unless(index);
 
 	const size_t SET_SIZE = 1 << 10;
 
@@ -58,7 +57,7 @@ void test_size()
 
 	fail_unless(bitset_index_size(index) == SET_SIZE);
 
-	bitset_index_free(&index);
+	bitset_index_delete(index);
 
 	footer();
 }
@@ -70,8 +69,8 @@ void check_keys(struct bitset_index *index,
 	struct bitset_expr *expr = bitset_expr_new();
 	fail_if(expr == NULL);
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 
 	printf("Checking keys... ");
 	for (size_t i = 0; i < size; i++) {
@@ -97,8 +96,8 @@ void check_keys(struct bitset_index *index,
 	}
 	printf("ok\n");
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 }
 
 static
@@ -106,8 +105,9 @@ void test_all_set()
 {
 	header();
 
-	struct bitset_index *index;
-	bitset_index_new(&index, sizeof(size_t) * CHAR_BIT);
+	struct bitset_index *index = bitset_index_new2(
+				sizeof(size_t) * CHAR_BIT);
+	fail_unless(index);
 
 	const size_t SET_SIZE = (size_t) 1 << 12;
 	size_t *keys = malloc(SET_SIZE * sizeof(size_t));
@@ -142,7 +142,7 @@ void test_all_set()
 
 	check_keys(index, keys, values, SET_SIZE);
 
-	bitset_index_free(&index);
+	bitset_index_delete(index);
 
 	footer();
 }
@@ -151,8 +151,9 @@ static
 void test_any_set() {
 	header();
 
-	struct bitset_index *index;
-	bitset_index_new(&index, sizeof(size_t) * CHAR_BIT);
+	struct bitset_index *index = bitset_index_new2(
+				sizeof(size_t) * CHAR_BIT);
+	fail_unless(index);
 
 	const size_t NUM_SIZE = (1 << 10);
 	for (size_t key = 0; key < NUM_SIZE; key++) {
@@ -166,8 +167,8 @@ void test_any_set() {
 	fail_if(expr == NULL);
 	bitset_index_iterate_any_set(index, expr, &key1, sizeof(key1));
 
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
 	for (size_t key = 0; key < NUM_SIZE; key++) {
 		if ((key & key1) == 0) {
@@ -178,10 +179,10 @@ void test_any_set() {
 	}
 	fail_unless(bitset_iterator_next(it) == SIZE_MAX);
 
-	bitset_iterator_free(&it);
-	bitset_expr_free(expr);
+	bitset_iterator_delete(it);
+	bitset_expr_delete(expr);
 
-	bitset_index_free(&index);
+	bitset_index_delete(index);
 	footer();
 }
 
@@ -189,8 +190,9 @@ static
 void test_equals() {
 	header();
 
-	struct bitset_index *index;
-	fail_if (bitset_index_new(&index, sizeof(size_t) * CHAR_BIT) < 0);
+	struct bitset_index *index = bitset_index_new2(
+				sizeof(size_t) * CHAR_BIT);
+	fail_unless(index);
 
 	size_t mask = ~((size_t ) 7);
 	const size_t NUM_SIZE = (1 << 17);
@@ -206,8 +208,8 @@ void test_equals() {
 	size_t key1 = (rand() % NUM_SIZE) & mask;
 	struct bitset_expr *expr = bitset_expr_new();
 	fail_if(expr == NULL);
-	struct bitset_iterator *it;
-	fail_unless(bitset_iterator_new(&it) == 0);
+	struct bitset_iterator *it = bitset_iterator_new();
+	fail_unless(it);
 	fail_unless(bitset_index_iterate_equals(index, expr,
 			&key1, sizeof(key1)) == 0);
 	fail_unless(bitset_iterator_set_expr(it, expr) == 0);
@@ -219,7 +221,7 @@ void test_equals() {
 
 	printf("Check done\n");
 
-	bitset_index_free(&index);
+	bitset_index_delete(index);
 	footer();
 
 }

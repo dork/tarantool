@@ -39,55 +39,55 @@ struct bitset_index {
 	size_t bitsets_size;
 };
 
-int
-bitset_index_new(struct bitset_index **pindex, size_t initial_size)
+struct bitset_index *
+bitset_index_new()
 {
-	int rc = -1;
+	return bitset_index_new2(32);
+}
 
-	*pindex = calloc(1, sizeof(struct bitset_index));
-	if (*pindex == NULL) {
+struct bitset_index *
+bitset_index_new2(size_t initial_size)
+{
+	struct bitset_index *index = calloc(1, sizeof(*index));
+	if (index == NULL) {
 		goto error_0;
 	}
 
-	struct bitset_index *index = *pindex;
 	index->bitsets = calloc(initial_size+1, sizeof(*index->bitsets));
 	if (index->bitsets == NULL) {
 		goto error_1;
 	}
 
 	index->bitsets_size = initial_size+1;
-	if (bitset_new(&(index->bitsets[0])) < 0) {
+	index->bitsets[0] = bitset_new();
+	if (!index->bitsets[0])
 		goto error_2;
-	}
 
-	return 0;
+	return index;
 
 	/* error handling */
 error_2:
 	free(index->bitsets);
 error_1:
-	free(*pindex);
+	free(index);
 error_0:
-	*pindex = NULL;
-	return rc;
+	return NULL;
 }
 
 void
-bitset_index_free(struct bitset_index **pindex)
+bitset_index_delete(struct bitset_index *index)
 {
-	struct bitset_index *index = *pindex;
-	if (index != NULL) {
-		for(size_t b = 0; b < index->bitsets_size; b++) {
-			if (index->bitsets[b] == NULL) {
-				continue;
-			}
+	if (!index)
+		return;
 
-			bitset_free(&(index->bitsets[b]));
-		}
-		free(index);
+	for(size_t b = 0; b < index->bitsets_size; b++) {
+		if (!index->bitsets[b])
+			continue;
+
+		bitset_delete(index->bitsets[b]);
 	}
 
-	*pindex = NULL;
+	free(index);
 }
 
 int
@@ -115,9 +115,9 @@ bitset_index_insert(struct bitset_index *index, void *key, size_t key_size,
 	while(find_next_set_bit(key, key_size, &pos) == 0) {
 		size_t b = pos + 1;
 		if (index->bitsets[b] == NULL) {
-			if (bitset_new(&index->bitsets[b]) < 0) {
+			index->bitsets[b] = bitset_new();
+			if (!index->bitsets[b])
 				return -1;
-			}
 		}
 
 		/* TODO(roman): rollback previous operations on error */
