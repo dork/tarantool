@@ -764,11 +764,11 @@ lua iterate(20, 3, 2, 4, box.index.LT, 'tid_000')
 ...
 lua iterate(20, 3, 2, 4, box.index.LT, 'tid_996', 'to', 'many', 'keys')
 ---
-error: 'iterator.lua:6: Key part count 4 is greater than index part count 2'
+error: 'Invalid key part count (expected [0..2], got 4)'
 ...
 
 #-----------------------------------------------------------------------------#
-# Iterator: hash multi-part non-unique
+# Iterator: hash single-part unique
 #-----------------------------------------------------------------------------#
 
 lua iterate(20, 4, 0, 1)
@@ -801,7 +801,7 @@ $pid_023$
 ...
 lua iterate(20, 4, 0, 1, box.index.EQ)
 ---
-error: 'Partial key in an exact match (key field count: 0, expected: 1)'
+error: 'Invalid key part count in an exact match (expected 1, got 0)'
 ...
 lua iterate(20, 4, 0, 1, box.index.GE)
 ---

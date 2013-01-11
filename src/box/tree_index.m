@@ -187,7 +187,7 @@ struct fixed_node {
 struct key_data
 {
 	const u8 *data;
-	int part_count;
+	u32 part_count;
 	union sparse_part parts[];
 };
 
@@ -199,22 +199,22 @@ struct key_data
  * Find if the field has fixed offset.
  */
 static int
-find_fixed_offset(struct space *space, int fieldno, int skip)
+find_fixed_offset(struct space *space, u32 fieldno, u32 skip)
 {
-	int i = skip;
-	int offset = 0;
+	u32 i = skip;
+	u32 offset = 0;
 
 	while (i < fieldno) {
 		/* if the field is unknown give up on it */
-		if (i >= space_max_fieldno(space) || space_field_type(space, i) == UNKNOWN) {
+		if (i >= space_arity_min(space) || space_field_def(space, i)->type == UNKNOWN) {
 			return -1;
 		}
 
 		/* On a fixed length field account for the appropiate
 		   varint length code and for the actual data length */
-		if (space_field_type(space, i) == NUM) {
+		if (space_field_def(space, i)->type == NUM) {
 			offset += 1 + 4;
-		} else if (space_field_type(space, i) == NUM64) {
+		} else if (space_field_def(space, i)->type == NUM64) {
 			offset += 1 + 8;
 		}
 		/* On a variable length field give up */
@@ -232,36 +232,47 @@ find_fixed_offset(struct space *space, int fieldno, int skip)
  * Find the first index field.
  */
 static u32
-find_first_field(struct key_def *key_def)
+find_first_field(const struct key_def *key_def)
 {
-	for (int field = 0; field < key_def->max_fieldno; ++field) {
-		int part = key_def->cmp_order[field];
-		if (part != -1) {
-			return field;
-		}
+	u32 first_field = UINT32_MAX;
+	for (u32 part = 0; part < key_def->part_count; part++) {
+		first_field = MIN(first_field, key_def->parts[part]);
 	}
-	panic("index field not found");
+
+	assert(first_field != UINT32_MAX);
+
+	return first_field;
+}
+
+static int
+qsort_u32_cmp(const void *a, const void *b)
+{
+	return u32_cmp(*(u32 *) a, *(u32 *) b);
 }
 
 /**
  * Find the appropriate tree type for a given key.
  */
 static enum tree_type
-find_tree_type(struct space *space, struct key_def *key_def)
+find_tree_type(struct space *space, const struct key_def *key_def)
 {
 	int dense = 1;
 	int fixed = 1;
 
 	/* Scan for the first tuple field used by the index */
-	int field = find_first_field(key_def);
+	u32 field = find_first_field(key_def);
 	if (find_fixed_offset(space, field, 0) < 0) {
 		fixed = 0;
 	}
 
 	/* Check that there are no gaps after the first field */
-	for (; field < key_def->max_fieldno; ++field) {
-		int part = key_def->cmp_order[field];
-		if (part == -1) {
+	u32 arity_min = space_arity_min(space);
+	u32 parts[key_def->part_count];
+	memcpy(parts, key_def->parts, sizeof(parts));
+	qsort(parts, key_def->part_count, sizeof(*parts), qsort_u32_cmp);
+
+	for (u32 part = 1; part < key_def->part_count; part++) {
+		if (parts[part-1] + 1 != parts[part]) {
 			dense = 0;
 			break;
 		}
@@ -272,7 +283,7 @@ find_tree_type(struct space *space, struct key_def *key_def)
 		return TREE_SPARSE;
 	} else if (fixed) {
 		return TREE_FIXED;
-	} else if (key_def->part_count == 1 && key_def->parts[0].type == NUM) {
+	} else if (key_def->part_count == 1 && space_field_def(space, key_def->parts[0])->type == NUM) {
 		return TREE_NUM32;
 	} else {
 		return TREE_DENSE;
@@ -286,9 +297,9 @@ static bool
 key_is_linear(struct key_def *key_def)
 {
 	if (key_def->part_count > 1) {
-		int prev = key_def->parts[0].fieldno;
-		for (int i = 1; i < key_def->part_count; ++i) {
-			int next = key_def->parts[i].fieldno;
+		u32 prev = key_def->parts[0];
+		for (u32 i = 1; i < key_def->part_count; ++i) {
+			u32 next = key_def->parts[i];
 			if (next != (prev + 1)) {
 				return false;
 			}
@@ -302,28 +313,32 @@ key_is_linear(struct key_def *key_def)
  * Find field offsets/values for a sparse node.
  */
 static void
-fold_with_sparse_parts(struct key_def *key_def, struct tuple *tuple, union sparse_part* parts)
+fold_with_sparse_parts(Index *self, struct tuple *tuple, union sparse_part* parts)
 {
-	assert (tuple->field_count >= key_def->max_fieldno);
+	assert (tuple->field_count >= space_arity_min(self->space));
+	struct key_def *key_def = &self->key_def;
 
 	const u8 *part_data = tuple->data;
 
 	memset(parts, 0, sizeof(parts[0]) * key_def->part_count);
 
-	for (int field = 0; field < key_def->max_fieldno; ++field) {
+	u32 arity = space_arity_min(self->space);
+	for (u32 field = 0; field < arity; ++field) {
 		assert(field < tuple->field_count);
 
 		const u8 *data = part_data;
 		u32 len = load_varint32((const void**) &data);
 
-		int part = key_def->cmp_order[field];
-		if (part != -1) {
-			if (key_def->parts[part].type == NUM) {
+		u32 part = self->cmp_order[field];
+		if (part != UINT32_MAX) {
+			const struct field_def *field_def = space_field_def(
+					self->space, key_def->parts[part]);
+			if (field_def->type == NUM) {
 				if (len != sizeof parts[part].num32) {
 					tnt_raise(IllegalParams, :"key is not u32");
 				}
 				memcpy(&parts[part].num32, data, len);
-			} else if (key_def->parts[part].type == NUM64) {
+			} else if (field_def->type == NUM64) {
 				if (len != sizeof parts[part].num64) {
 					tnt_raise(IllegalParams, :"key is not u64");
 				}
@@ -345,23 +360,26 @@ fold_with_sparse_parts(struct key_def *key_def, struct tuple *tuple, union spars
  * Find field offsets/values for a key.
  */
 static void
-fold_with_key_parts(struct key_def *key_def, struct key_data *key_data)
+fold_with_key_parts(Index *self, struct key_data *key_data)
 {
+	struct key_def *key_def = &self->key_def;
 	const u8 *part_data = key_data->data;
 	union sparse_part* parts = key_data->parts;
 
 	memset(parts, 0, sizeof(parts[0]) * key_def->part_count);
 
-	int part_count = MIN(key_def->part_count, key_data->part_count);
-	for (int part = 0; part < part_count; ++part) {
+	u32 part_count = MIN(key_def->part_count, key_data->part_count);
+	for (u32 part = 0; part < part_count; ++part) {
 		const u8 *data = part_data;
 		u32 len = load_varint32((const void**) &data);
 
-		if (key_def->parts[part].type == NUM) {
+		const struct field_def *field_def = space_field_def(
+				self->space, key_def->parts[part]);
+		if (field_def->type == NUM) {
 			if (len != sizeof parts[part].num32)
 				tnt_raise(IllegalParams, :"key is not u32");
 			memcpy(&parts[part].num32, data, len);
-		} else if (key_def->parts[part].type == NUM64) {
+		} else if (field_def->type == NUM64) {
 			if (len != sizeof parts[part].num64)
 				tnt_raise(IllegalParams, :"key is not u64");
 			memcpy(&parts[part].num64, data, len);
@@ -381,18 +399,20 @@ fold_with_key_parts(struct key_def *key_def, struct key_data *key_data)
  * Find the offset for a dense node.
  */
 static u32
-fold_with_dense_offset(struct key_def *key_def, struct tuple *tuple)
+fold_with_dense_offset(Index *self, struct tuple *tuple)
 {
+	struct key_def *key_def = &self->key_def;
 	const u8 *tuple_data = tuple->data;
 
-	for (int field = 0; field < key_def->max_fieldno; ++field) {
+	u32 arity_min = space_arity_min(self->space);
+	for (u32 field = 0; field < arity_min; ++field) {
 		assert(field < tuple->field_count);
 
 		const u8 *data = tuple_data;
 		u32 len = load_varint32((const void**) &data);
 
-		int part = key_def->cmp_order[field];
-		if (part != -1) {
+		u32 part = self->cmp_order[field];
+		if (part != UINT32_MAX) {
 			return (u32) (tuple_data - tuple->data);
 		}
 
@@ -406,18 +426,20 @@ fold_with_dense_offset(struct key_def *key_def, struct tuple *tuple)
  * Find the value for a num32 node.
  */
 static u32
-fold_with_num32_value(struct key_def *key_def, struct tuple *tuple)
+fold_with_num32_value(Index *self, struct tuple *tuple)
 {
+	struct key_def *key_def = &self->key_def;
 	const u8 *tuple_data = tuple->data;
 
-	for (int field = 0; field < key_def->max_fieldno; ++field) {
+	u32 arity_min = space_arity_min(self->space);
+	for (u32 field = 0; field < arity_min; ++field) {
 		assert(field < tuple->field_count);
 
 		const u8 *data = tuple_data;
 		u32 len = load_varint32((const void**) &data);
 
-		int part = key_def->cmp_order[field];
-		if (part != -1) {
+		u32 part = self->cmp_order[field];
+		if (part != UINT32_MAX) {
 			u32 value;
 			assert(len == sizeof value);
 			memcpy(&value, data, sizeof value);
@@ -475,14 +497,17 @@ sparse_part_compare(enum field_data_type type,
  * Compare a key for two sparse nodes.
  */
 static int
-sparse_node_compare(struct key_def *key_def,
+sparse_node_compare(Index *self,
 		    struct tuple *tuple_a,
 		    const union sparse_part* parts_a,
 		    struct tuple *tuple_b,
 		    const union sparse_part* parts_b)
 {
-	for (int part = 0; part < key_def->part_count; ++part) {
-		int r = sparse_part_compare(key_def->parts[part].type,
+	struct key_def *key_def = &self->key_def;
+	for (u32 part = 0; part < key_def->part_count; ++part) {
+		enum field_data_type type = space_field_def(self->space,
+				self->key_def.parts[part])->type;
+		int r = sparse_part_compare(type,
 					    tuple_a->data, parts_a[part],
 					    tuple_b->data, parts_b[part]);
 		if (r) {
@@ -496,14 +521,18 @@ sparse_node_compare(struct key_def *key_def,
  * Compare a key for a key search data and a sparse node.
  */
 static int
-sparse_key_node_compare(struct key_def *key_def,
+sparse_key_node_compare(Index *self,
 			const struct key_data *key_data,
 			struct tuple *tuple,
 			const union sparse_part* parts)
 {
-	int part_count = MIN(key_def->part_count, key_data->part_count);
-	for (int part = 0; part < part_count; ++part) {
-		int r = sparse_part_compare(key_def->parts[part].type,
+	struct key_def *key_def = &self->key_def;
+
+	u32 part_count = MIN(key_def->part_count, key_data->part_count);
+	for (u32 part = 0; part < part_count; ++part) {
+		enum field_data_type type = space_field_def(self->space,
+				self->key_def.parts[part])->type;
+		int r = sparse_part_compare(type,
 					    key_data->data,
 					    key_data->parts[part],
 					    tuple->data, parts[part]);
@@ -547,11 +576,12 @@ dense_part_compare(enum field_data_type type,
  * Compare a key for two dense nodes.
  */
 static int
-dense_node_compare(struct key_def *key_def, u32 first_field,
+dense_node_compare(Index *self, u32 first_field,
 		   struct tuple *tuple_a, u32 offset_a,
 		   struct tuple *tuple_b, u32 offset_b)
 {
-	int part_count = key_def->part_count;
+	struct key_def *key_def = &self->key_def;
+	u32 part_count = key_def->part_count;
 	assert(first_field + part_count <= tuple_a->field_count);
 	assert(first_field + part_count <= tuple_b->field_count);
 
@@ -576,13 +606,16 @@ dense_node_compare(struct key_def *key_def, u32 first_field,
 	}
 
 	/* Compare key parts. */
-	for (int part = 0; part < part_count; ++part) {
-		int field = key_def->parts[part].fieldno;
+	for (u32 part = 0; part < part_count; ++part) {
+		u32 field = key_def->parts[part];
 		u8 *ad = tuple_a->data + off_a[field - first_field];
 		u8 *bd = tuple_b->data + off_b[field - first_field];
 		u32 al = load_varint32((void *) &ad);
 		u32 bl = load_varint32((void *) &bd);
-		int r = dense_part_compare(key_def->parts[part].type,
+
+		enum field_data_type type = space_field_def(self->space,
+				self->key_def.parts[part])->type;
+		int r = dense_part_compare(type,
 					   ad, al, bd, bl);
 		if (r) {
 			return r;
@@ -595,22 +628,26 @@ dense_node_compare(struct key_def *key_def, u32 first_field,
  * Compare a part for two dense keys with parts in linear order.
  */
 static int
-linear_node_compare(struct key_def *key_def,
+linear_node_compare(Index *self,
 		    u32 first_field  __attribute__((unused)),
 		    struct tuple *tuple_a, u32 offset_a,
 		    struct tuple *tuple_b, u32 offset_b)
 {
-	int part_count = key_def->part_count;
+	struct key_def *key_def = &self->key_def;
+	u32 part_count = key_def->part_count;
 	assert(first_field + part_count <= tuple_a->field_count);
 	assert(first_field + part_count <= tuple_b->field_count);
 
 	/* Compare key parts. */
 	const u8 *ad = tuple_a->data + offset_a;
 	const u8 *bd = tuple_b->data + offset_b;
-	for (int part = 0; part < part_count; ++part) {
+	for (u32 part = 0; part < part_count; ++part) {
 		u32 al = load_varint32((const void**) &ad);
 		u32 bl = load_varint32((const void**) &bd);
-		int r = dense_part_compare(key_def->parts[part].type,
+
+		enum field_data_type type = space_field_def(self->space,
+				self->key_def.parts[part])->type;
+		int r = dense_part_compare(type,
 					   ad, al, bd, bl);
 		if (r) {
 			return r;
@@ -666,11 +703,12 @@ dense_key_part_compare(enum field_data_type type,
  * Compare a key for a key search data and a dense node.
  */
 static int
-dense_key_node_compare(struct key_def *key_def,
+dense_key_node_compare(Index *self,
 		       const struct key_data *key_data,
 		       u32 first_field, struct tuple *tuple, u32 offset)
 {
-	int part_count = key_def->part_count;
+	struct key_def *key_def = &self->key_def;
+	u32 part_count = key_def->part_count;
 	assert(first_field + part_count <= tuple->field_count);
 
 	/* Allocate space for offsets. */
@@ -680,7 +718,7 @@ dense_key_node_compare(struct key_def *key_def,
 	off[0] = offset;
 	if (part_count > 1) {
 		const u8 *data = tuple->data + offset;
-		for (int i = 1; i < part_count; ++i) {
+		for (u32 i = 1; i < part_count; ++i) {
 			u32 len = load_varint32((const void**) &data);
 			data += len;
 			off[i] = data - tuple->data;
@@ -690,11 +728,13 @@ dense_key_node_compare(struct key_def *key_def,
 	/* Compare key parts. */
 	if (part_count > key_data->part_count)
 		part_count = key_data->part_count;
-	for (int part = 0; part < part_count; ++part) {
-		int field = key_def->parts[part].fieldno;
+	for (u32 part = 0; part < part_count; ++part) {
+		u32 field = key_def->parts[part];
 		const u8 *bd = tuple->data + off[field - first_field];
 		u32 bl = load_varint32((void *) &bd);
-		int r = dense_key_part_compare(key_def->parts[part].type,
+		enum field_data_type type = space_field_def(self->space,
+				self->key_def.parts[part])->type;
+		int r = dense_key_part_compare(type,
 					       key_data->data,
 					       key_data->parts[part],
 					       bd, bl);
@@ -710,21 +750,24 @@ dense_key_node_compare(struct key_def *key_def,
  * linear order.
  */
 static int
-linear_key_node_compare(struct key_def *key_def,
+linear_key_node_compare(Index *self,
 			const struct key_data *key_data,
 			u32 first_field __attribute__((unused)),
 			struct tuple *tuple, u32 offset)
 {
-	int part_count = key_def->part_count;
+	struct key_def *key_def = &self->key_def;
+	u32 part_count = key_def->part_count;
 	assert(first_field + part_count <= tuple->field_count);
 
 	/* Compare key parts. */
 	if (part_count > key_data->part_count)
 		part_count = key_data->part_count;
 	u8 *bd = tuple->data + offset;
-	for (int part = 0; part < part_count; ++part) {
+	for (u32 part = 0; part < part_count; ++part) {
 		u32 bl = load_varint32((void *) &bd);
-		int r = dense_key_part_compare(key_def->parts[part].type,
+		enum field_data_type type = space_field_def(self->space,
+				self->key_def.parts[part])->type;
+		int r = dense_key_part_compare(type,
 					       key_data->data,
 					       key_data->parts[part],
 					       bd, bl);
@@ -877,7 +920,7 @@ tree_iterator_gt(struct iterator *iterator)
 	return &tree_index_traits;
 }
 
-+ (Index *) alloc: (struct key_def *) key_def :(struct space *) space
++ (TreeIndex *) alloc :(const struct key_def *) key_def :(struct space *) space
 {
 	enum tree_type type = find_tree_type(space, key_def);
 	switch (type) {
@@ -900,7 +943,7 @@ tree_iterator_gt(struct iterator *iterator)
 	[super free];
 }
 
-- (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg
+- (id) init: (const struct key_def *) key_def_arg :(struct space *) space_arg
 {
 	self = [super init: key_def_arg :space_arg];
 	if (self == NULL)
@@ -927,10 +970,25 @@ tree_iterator_gt(struct iterator *iterator)
 	return [self unfold: node];
 }
 
-- (struct tuple *) findByKey: (const void *) key : (int) part_count
+- (void) validateKey: (enum iterator_type) type
+      :(const void *) key :(u32) part_count
 {
-	assert(key_def->is_unique);
-	check_key_parts(key_def, part_count, false);
+	if (part_count == 0) {
+		assert(key == NULL);
+		return;
+	}
+
+	[super validateKey :type :key :part_count];
+}
+
+- (struct tuple *) findByKey: (const void *) key :(u32) part_count
+{
+	assert(key_def.is_unique);
+	if (part_count != key_def.part_count) {
+		tnt_raise(ClientError, :ER_EXACT_MATCH,
+			  self->key_def.part_count, part_count);
+	}
+	[self validateKey: ITER_EQ :key :part_count];
 
 	struct key_data *key_data
 		= alloca(sizeof(struct key_data) +
@@ -938,7 +996,7 @@ tree_iterator_gt(struct iterator *iterator)
 
 	key_data->data = key;
 	key_data->part_count = part_count;
-	fold_with_key_parts(key_def, key_data);
+	fold_with_key_parts(self, key_data);
 
 	void *node = sptree_index_find(&tree, key_data);
 	return [self unfold: node];
@@ -946,16 +1004,13 @@ tree_iterator_gt(struct iterator *iterator)
 
 - (struct tuple *) findByTuple: (struct tuple *) tuple
 {
-	assert(key_def->is_unique);
-	if (tuple->field_count < key_def->max_fieldno)
-		tnt_raise(IllegalParams, :"tuple must have all indexed fields");
-
+	assert(key_def.is_unique);
 	struct key_data *key_data
 		= alloca(sizeof(struct key_data) + _SIZEOF_SPARSE_PARTS(tuple->field_count));
 
 	key_data->data = tuple->data;
 	key_data->part_count = tuple->field_count;
-	fold_with_sparse_parts(key_def, tuple, key_data->parts);
+	fold_with_sparse_parts(self, tuple, key_data->parts);
 
 	void *node = sptree_index_find(&tree, key_data);
 	return [self unfold: node];
@@ -998,9 +1053,9 @@ tree_iterator_gt(struct iterator *iterator)
 
 - (struct iterator *) allocIterator
 {
-	assert(key_def->part_count);
+	assert(key_def.part_count);
 	struct tree_iterator *it
-		= malloc(sizeof(struct tree_iterator) + SIZEOF_SPARSE_PARTS(key_def));
+		= malloc(sizeof(struct tree_iterator) + SIZEOF_SPARSE_PARTS(&key_def));
 
 	if (it) {
 		memset(it, 0, sizeof(struct tree_iterator));
@@ -1012,14 +1067,13 @@ tree_iterator_gt(struct iterator *iterator)
 
 - (void) initIterator: (struct iterator *) iterator
 	:(enum iterator_type) type
-	:(void *) key :(int) part_count
+	:(void *) key :(u32) part_count
 {
+	[self validateKey: type :key :part_count];
+
 	struct tree_iterator *it = tree_iterator(iterator);
 
-	if (part_count != 0) {
-		check_key_parts(key_def, part_count,
-				traits->allows_partial_key);
-	} else {
+	if (part_count == 0) {
 		/*
 		 * If no key is specified, downgrade equality
 		 * iterators to a full range.
@@ -1030,7 +1084,7 @@ tree_iterator_gt(struct iterator *iterator)
 	it->key_data.data = key;
 	it->key_data.part_count = part_count;
 
-	fold_with_key_parts(key_def, &it->key_data);
+	fold_with_key_parts(self, &it->key_data);
 
 	if (iterator_type_is_reverse(type))
 		sptree_index_iterator_reverse_init_set(&tree, &it->iter,
@@ -1152,7 +1206,7 @@ tree_iterator_gt(struct iterator *iterator)
 	sptree_index_init(&tree,
 			  node_size, nodes, n_tuples, estimated_tuples,
 			  [self key_node_cmp],
-			  key_def->is_unique ? [self node_cmp] : [self dup_node_cmp],
+			  key_def.is_unique ? [self node_cmp] : [self dup_node_cmp],
 			  self);
 }
 
@@ -1203,10 +1257,10 @@ tree_iterator_gt(struct iterator *iterator)
 static int
 sparse_node_cmp(const void *node_a, const void *node_b, void *arg)
 {
-	SparseTreeIndex *index = (SparseTreeIndex *) arg;
+	SparseTreeIndex *self = (SparseTreeIndex *) arg;
 	const struct sparse_node *node_xa = node_a;
 	const struct sparse_node *node_xb = node_b;
-	return sparse_node_compare(index->key_def,
+	return sparse_node_compare(self,
 				   node_xa->tuple, node_xa->parts,
 				   node_xb->tuple, node_xb->parts);
 }
@@ -1226,10 +1280,10 @@ sparse_dup_node_cmp(const void *node_a, const void *node_b, void *arg)
 static int
 sparse_key_node_cmp(const void *key, const void *node, void *arg)
 {
-	SparseTreeIndex *index = (SparseTreeIndex *) arg;
+	SparseTreeIndex *self = (SparseTreeIndex *) arg;
 	const struct key_data *key_data = key;
 	const struct sparse_node *node_x = node;
-	return sparse_key_node_compare(index->key_def, key_data,
+	return sparse_key_node_compare(self, key_data,
 				       node_x->tuple, node_x->parts);
 }
 
@@ -1237,7 +1291,7 @@ sparse_key_node_cmp(const void *key, const void *node, void *arg)
 
 - (size_t) node_size
 {
-	return sizeof(struct sparse_node) + SIZEOF_SPARSE_PARTS(key_def);
+	return sizeof(struct sparse_node) + SIZEOF_SPARSE_PARTS(&key_def);
 }
 
 - (tree_cmp_t) node_cmp
@@ -1259,7 +1313,7 @@ sparse_key_node_cmp(const void *key, const void *node, void *arg)
 {
 	struct sparse_node *node_x = node;
 	node_x->tuple = tuple;
-	fold_with_sparse_parts(key_def, tuple, node_x->parts);
+	fold_with_sparse_parts(self, tuple, node_x->parts);
 }
 
 - (struct tuple *) unfold: (const void *) node
@@ -1277,10 +1331,10 @@ sparse_key_node_cmp(const void *key, const void *node, void *arg)
 static int
 dense_node_cmp(const void *node_a, const void *node_b, void *arg)
 {
-	DenseTreeIndex *index = (DenseTreeIndex *) arg;
+	DenseTreeIndex *self = (DenseTreeIndex *) arg;
 	const struct dense_node *node_xa = node_a;
 	const struct dense_node *node_xb = node_b;
-	return dense_node_compare(index->key_def, index->first_field,
+	return dense_node_compare(self, self->first_field,
 				  node_xa->tuple, node_xa->offset,
 				  node_xb->tuple, node_xb->offset);
 }
@@ -1300,21 +1354,21 @@ dense_dup_node_cmp(const void *node_a, const void *node_b, void *arg)
 static int
 dense_key_node_cmp(const void *key, const void * node, void *arg)
 {
-	DenseTreeIndex *index = (DenseTreeIndex *) arg;
+	DenseTreeIndex *self = (DenseTreeIndex *) arg;
 	const struct key_data *key_data = key;
 	const struct dense_node *node_x = node;
-	return dense_key_node_compare(index->key_def, key_data,
-				      index->first_field,
+	return dense_key_node_compare(self, key_data,
+				      self->first_field,
 				      node_x->tuple, node_x->offset);
 }
 
 static int
 linear_dense_node_cmp(const void *node_a, const void *node_b, void *arg)
 {
-	DenseTreeIndex *index = (DenseTreeIndex *) arg;
+	DenseTreeIndex *self = (DenseTreeIndex *) arg;
 	const struct dense_node *node_xa = node_a;
 	const struct dense_node *node_xb = node_b;
-	return linear_node_compare(index->key_def, index->first_field,
+	return linear_node_compare(self, self->first_field,
 				   node_xa->tuple, node_xa->offset,
 				   node_xb->tuple, node_xb->offset);
 }
@@ -1334,23 +1388,23 @@ linear_dense_dup_node_cmp(const void *node_a, const void *node_b, void *arg)
 static int
 linear_dense_key_node_cmp(const void *key, const void * node, void *arg)
 {
-	DenseTreeIndex *index = (DenseTreeIndex *) arg;
+	DenseTreeIndex *self = (DenseTreeIndex *) arg;
 	const struct key_data *key_data = key;
 	const struct dense_node *node_x = node;
-	return linear_key_node_compare(index->key_def, key_data,
-				       index->first_field,
+	return linear_key_node_compare(self, key_data,
+				       self->first_field,
 				       node_x->tuple, node_x->offset);
 }
 
 @implementation DenseTreeIndex
 
-- (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg
+- (id) init: (const struct key_def *) key_def_arg :(struct space *) space_arg
 {
 	self = [super init: key_def_arg :space_arg];
 	if (self == NULL)
 		return NULL;
 
-	first_field = find_first_field(key_def);
+	first_field = find_first_field(&key_def);
 	return self;
 }
 
@@ -1361,21 +1415,21 @@ linear_dense_key_node_cmp(const void *key, const void * node, void *arg)
 
 - (tree_cmp_t) node_cmp
 {
-	return key_is_linear(key_def)
+	return key_is_linear(&key_def)
 		? linear_dense_node_cmp
 		: dense_node_cmp;
 }
 
 - (tree_cmp_t) dup_node_cmp
 {
-	return key_is_linear(key_def)
+	return key_is_linear(&key_def)
 		? linear_dense_dup_node_cmp
 		: dense_dup_node_cmp;
 }
 
 - (tree_cmp_t) key_node_cmp
 {
-	return key_is_linear(key_def)
+	return key_is_linear(&key_def)
 		? linear_dense_key_node_cmp
 		: dense_key_node_cmp;
 }
@@ -1384,7 +1438,7 @@ linear_dense_key_node_cmp(const void *key, const void * node, void *arg)
 {
 	struct dense_node *node_x = node;
 	node_x->tuple = tuple;
-	node_x->offset = fold_with_dense_offset(key_def, tuple);
+	node_x->offset = fold_with_dense_offset(self, tuple);
 }
 
 - (struct tuple *) unfold: (const void *) node
@@ -1457,7 +1511,7 @@ num32_key_node_cmp(const void * key, const void * node, void *arg)
 {
 	struct num32_node *node_x = (struct num32_node *) node;
 	node_x->tuple = tuple;
-	node_x->value = fold_with_num32_value(key_def, tuple);
+	node_x->value = fold_with_num32_value(self, tuple);
 }
 
 - (struct tuple *) unfold: (const void *) node
@@ -1475,12 +1529,12 @@ num32_key_node_cmp(const void * key, const void * node, void *arg)
 static int
 fixed_node_cmp(const void *node_a, const void *node_b, void *arg)
 {
-	FixedTreeIndex *index = (FixedTreeIndex *) arg;
+	FixedTreeIndex *self = (FixedTreeIndex *) arg;
 	const struct fixed_node *node_xa = node_a;
 	const struct fixed_node *node_xb = node_b;
-	return dense_node_compare(index->key_def, index->first_field,
-				  node_xa->tuple, index->first_offset,
-				  node_xb->tuple, index->first_offset);
+	return dense_node_compare(self, self->first_field,
+				  node_xa->tuple, self->first_offset,
+				  node_xb->tuple, self->first_offset);
 }
 
 static int
@@ -1498,23 +1552,23 @@ fixed_dup_node_cmp(const void *node_a, const void *node_b, void *arg)
 static int
 fixed_key_node_cmp(const void *key, const void * node, void *arg)
 {
-	FixedTreeIndex *index = (FixedTreeIndex *) arg;
+	FixedTreeIndex *self = (FixedTreeIndex *) arg;
 	const struct key_data *key_data = key;
 	const struct fixed_node *node_x = node;
-	return dense_key_node_compare(index->key_def, key_data,
-				      index->first_field,
-				      node_x->tuple, index->first_offset);
+	return dense_key_node_compare(self, key_data,
+				      self->first_field,
+				      node_x->tuple, self->first_offset);
 }
 
 static int
 linear_fixed_node_cmp(const void *node_a, const void *node_b, void *arg)
 {
-	FixedTreeIndex *index = (FixedTreeIndex *) arg;
+	FixedTreeIndex *self = (FixedTreeIndex *) arg;
 	const struct fixed_node *node_xa = node_a;
 	const struct fixed_node *node_xb = node_b;
-	return linear_node_compare(index->key_def, index->first_field,
-				   node_xa->tuple, index->first_offset,
-				   node_xb->tuple, index->first_offset);
+	return linear_node_compare(self, self->first_field,
+				   node_xa->tuple, self->first_offset,
+				   node_xb->tuple, self->first_offset);
 }
 
 static int
@@ -1532,23 +1586,23 @@ linear_fixed_dup_node_cmp(const void *node_a, const void *node_b, void *arg)
 static int
 linear_fixed_key_node_cmp(const void *key, const void * node, void *arg)
 {
-	FixedTreeIndex *index = (FixedTreeIndex *) arg;
+	FixedTreeIndex *self = (FixedTreeIndex *) arg;
 	const struct key_data *key_data = key;
 	const struct fixed_node *node_x = node;
-	return linear_key_node_compare(index->key_def, key_data,
-					 index->first_field,
-					 node_x->tuple, index->first_offset);
+	return linear_key_node_compare(self, key_data,
+					 self->first_field,
+					 node_x->tuple, self->first_offset);
 }
 
 @implementation FixedTreeIndex
 
-- (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg
+- (id) init: (const struct key_def *) key_def_arg :(struct space *) space_arg
 {
 	self = [super init: key_def_arg :space_arg];
 	if (self == NULL)
 		return NULL;
 
-	first_field = find_first_field(key_def);
+	first_field = find_first_field(&key_def);
 	first_offset = find_fixed_offset(space, first_field, 0);
 	return self;
 }
@@ -1560,21 +1614,21 @@ linear_fixed_key_node_cmp(const void *key, const void * node, void *arg)
 
 - (tree_cmp_t) node_cmp
 {
-	return key_is_linear(key_def)
+	return key_is_linear(&key_def)
 		? linear_fixed_node_cmp
 		: fixed_node_cmp;
 }
 
 - (tree_cmp_t) dup_node_cmp
 {
-	return key_is_linear(key_def)
+	return key_is_linear(&key_def)
 		? linear_fixed_dup_node_cmp
 		: fixed_dup_node_cmp;
 }
 
 - (tree_cmp_t) key_node_cmp
 {
-	return key_is_linear(key_def)
+	return key_is_linear(&key_def)
 		? linear_fixed_key_node_cmp
 		: fixed_key_node_cmp;
 }

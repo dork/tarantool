@@ -36,8 +36,10 @@
 @interface HashIndex: Index
 
 + (struct index_traits *) traits;
-+ (HashIndex *) alloc: (struct key_def *) key_def :(struct space *) space;
++ (HashIndex *) alloc: (const struct key_def *) key_def :(struct space *) space;
 
+- (void) validateKey: (enum iterator_type) type
+      :(const void *) key :(u32) part_count;
 - (void) reserve: (u32) n_tuples;
 @end
 

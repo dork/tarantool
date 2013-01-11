@@ -46,7 +46,10 @@ typedef int (*tree_cmp_t)(const void *, const void *, void *);
 };
 
 + (struct index_traits *) traits;
-+ (Index *) alloc: (struct key_def *) key_def :(struct space *) space;
++ (TreeIndex *) alloc: (const struct key_def *) key_def :(struct space *) space;
+
+- (void) validateKey: (enum iterator_type) type
+      :(const void *) key :(u32) part_count;
 
 /** To be defined in subclasses. */
 - (size_t) node_size;

@@ -591,7 +591,7 @@ static int
 lbox_index_part_count(struct lua_State *L)
 {
 	Index *index = lua_checkindex(L, 1);
-	lua_pushinteger(L, index->key_def->part_count);
+	lua_pushinteger(L, index->key_def.part_count);
 	return 1;
 }
 
@@ -687,7 +687,7 @@ lbox_create_iterator(struct lua_State *L)
 	int argc = lua_gettop(L);
 	/* Create a new iterator. */
 	enum iterator_type type;
-	int field_count;
+	u32 field_count;
 	void *key;
 	if (argc == 1 || (argc == 2 && lua_type(L, 2) == LUA_TNIL)) {
 		/*
@@ -715,25 +715,32 @@ lbox_create_iterator(struct lua_State *L)
 		} else {
 			/* Single or multi- part key. */
 			field_count = argc - 2;
+			say_warn("Field_count: %u %u",
+				 field_count, index->key_def.part_count);
 			struct tbuf *data = tbuf_alloc(fiber->gc_pool);
-			for (int i = 3; i <= argc; i++)
-				append_key_part(L, i, data,
-						index->key_def->parts[i-3].type);
+			for (int i = 3; i <= argc; i++) {
+				u32 part = i-3;
+				enum field_data_type type = UNKNOWN;
+				if (part < index->key_def.part_count) {
+					u32 field_no = index->key_def.parts[i-3];
+					type = space_field_def(index->space,
+							       field_no)->type;
+				}
+				append_key_part(L, i, data, type);
+			}
 			key = data->data;
 		}
-		/*
-		 * We allow partially specified keys for TREE
-		 * indexes. HASH indexes can only use single-part
-		 * keys.
-		*/
-		if (field_count > index->key_def->part_count)
-			luaL_error(L, "Key part count %d"
-				   " is greater than index part count %d",
-				   field_count, index->key_def->part_count);
 	}
+
+
 	struct iterator *it = [index allocIterator];
-	[index initIterator: it :type :key :field_count];
-	lbox_pushiterator(L, it);
+	@try {
+		[index initIterator: it :type :key :field_count];
+		lbox_pushiterator(L, it);
+	} @catch(tnt_Exception *) {
+		it->free(it);
+		@throw;
+	}
 
 	return it;
 }
@@ -824,12 +831,16 @@ lbox_index_count(struct lua_State *L)
 		/* Single or multi- part key. */
 		key_part_count = argc;
 		struct tbuf *data = tbuf_alloc(fiber->gc_pool);
-		for (int i = 0; i < argc; ++i)
+		for (int i = 0; i < argc; ++i) {
+			enum field_data_type type = space_field_def(
+				index->space, index->key_def.parts[i])->type;
 			append_key_part(L, i + 2, data,
-					index->key_def->parts[i].type);
+					type);
+		}
 		key = data->data;
 	}
 	u32 count = 0;
+
 	/* preparing index iterator */
 	struct iterator *it = index->position;
 	[index initIterator: it :ITER_EQ :key :key_part_count];

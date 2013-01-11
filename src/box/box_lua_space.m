@@ -45,9 +45,18 @@ lbox_pushspace(struct lua_State *L, struct space *space)
 {
 	lua_newtable(L);
 
-	/* space.cardinality */
+	/* space.arity */
+	lua_pushstring(L, "arity_min");
+	lua_pushinteger(L, space->arity_min);
+	lua_settable(L, -3);
+
+	/* Backward compatibility with 1.4.x */
 	lua_pushstring(L, "cardinality");
-	lua_pushnumber(L, space->arity);
+	lua_pushinteger(L, space->arity_max);
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "arity_max");
+	lua_pushinteger(L, space->arity_max);
 	lua_settable(L, -3);
 
 	/* space.n */
@@ -72,28 +81,30 @@ lbox_pushspace(struct lua_State *L, struct space *space)
 	 * Fill space.index table with
 	 * all defined indexes.
 	 */
-	for (int i = 0; i < space->key_count; i++) {
+	for (u32 i = 0; i < space->index_count; i++) {
 		lua_pushnumber(L, i);
 		lua_newtable(L);		/* space.index[i] */
 
 		lua_pushstring(L, "unique");
-		lua_pushboolean(L, space->key_defs[i].is_unique);
+		lua_pushboolean(L, space->index[i]->key_def.is_unique);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "type");
 
-		lua_pushstring(L, index_type_strs[space->key_defs[i].type]);
+		lua_pushstring(L, index_type_strs[space->index_type[i]]);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "key_field");
 		lua_newtable(L);
 
-		for (int j = 0; j < space->key_defs[i].part_count; j++) {
+		for (u32 j = 0; j < space->index[i]->key_def.part_count; j++) {
 			lua_pushnumber(L, j);
 			lua_newtable(L);
 
 			lua_pushstring(L, "type");
-			switch (space->key_defs[i].parts[j].type) {
+			const struct field_def *field_def = space_field_def(
+				space, space->index[i]->key_def.parts[j]);
+			switch (field_def->type) {
 			case NUM:
 				lua_pushstring(L, "NUM");
 				break;
@@ -110,7 +121,7 @@ lbox_pushspace(struct lua_State *L, struct space *space)
 			lua_settable(L, -3);
 
 			lua_pushstring(L, "fieldno");
-			lua_pushnumber(L, space->key_defs[i].parts[j].fieldno);
+			lua_pushnumber(L, space->index[i]->key_def.parts[j]);
 			lua_settable(L, -3);
 
 			lua_settable(L, -3);

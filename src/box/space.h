@@ -34,18 +34,28 @@
 struct tarantool_cfg;
 
 
-enum {
-	BOX_INDEX_MAX = 10,
+/*
+ * Possible field data types. Can't use STRS/ENUM macros for them,
+ * since there is a mismatch between enum name (STRING) and type
+ * name literal ("STR"). STR is already used as Objective C type.
+ */
+enum field_data_type {
+	UNKNOWN = 0,
+	NUM     = 1,
+	NUM64   = 2,
+	STRING  = 3,
+	field_data_type_MAX
+};
+extern const char *field_data_type_strs[];
+
+/** Descriptor of a single part in a multipart key. */
+struct field_def {
+	enum field_data_type type;
 };
 
 struct space {
 	Index *index[BOX_INDEX_MAX];
-	/** If not set (is 0), any tuple in the
-	 * space can have any number of fields (but
-	 * @sa max_fieldno). If set, Each tuple
-	 * must have exactly this many fields.
-	 */
-	int arity;
+	enum index_type index_type[BOX_INDEX_MAX];
 
 	/**
 	 * The number of indexes in the space.
@@ -53,12 +63,7 @@ struct space {
 	 * It is equal to the number of non-nil members of the index
 	 * array and defines the key_defs array size as well.
 	 */
-	int key_count;
-
-	/**
-	 * The descriptors for all indexes that belong to the space.
-	 */
-	struct key_def *key_defs;
+	u32 index_count;
 
 	/**
 	 * Field types of indexed fields. This is an array of size
@@ -68,22 +73,23 @@ struct space {
 	 * XXX: right now UNKNOWN is also set for fields which types
 	 * in two indexes contradict each other.
 	 */
-	enum field_data_type *field_types;
-
+	struct field_def *field_defs;
+	u32 fields_defs_capacity;
 	/**
 	 * Max field no which participates in any of the space indexes.
 	 * Each tuple in this space must have, therefore, at least
-	 * field_count fields.
+	 * arity_min fields.
 	 */
-	int max_fieldno;
+	u32 arity_min;
+	u32 arity_max;
 
 	/** Space number. */
-	i32 no;
+	u32 no;
 };
 
 
 /** Get space ordinal number. */
-static inline i32 space_n(struct space *sp) { return sp->no; }
+static inline u32 space_n(struct space *sp) { return sp->no; }
 
 /**
  * @brief A single method to handle REPLACE, DELETE and UPDATE.
@@ -193,10 +199,6 @@ space_index(struct space *sp, int index_no)
 	return NULL;
 }
 
-/** Set index by index no. */
-void
-space_set_index(struct space *sp, int index_no, Index *idx);
-
 /**
  * Call a visitor function on every enabled space.
  */
@@ -208,10 +210,10 @@ space_foreach(void (*func)(struct space *sp, void *udata), void *udata);
  *
  * @return NULL if space not found, otherwise space object.
  */
-struct space *space_by_n(i32 space_no);
+struct space *space_by_n(u32 space_no);
 
 static inline struct space *
-space_find(i32 space_no)
+space_find(u32 space_no)
 {
 	struct space *s = space_by_n(space_no);
 	if (s)
@@ -220,38 +222,42 @@ space_find(i32 space_no)
 	tnt_raise(ClientError, :ER_NO_SUCH_SPACE, space_no);
 }
 
-
-/** Get key_def ordinal number. */
-static inline int
-key_def_n(struct space *sp, struct key_def *kp)
+static inline u32
+space_arity_min(struct space *sp)
 {
-	assert(kp >= sp->key_defs && kp < (sp->key_defs + sp->key_count));
-	return kp - sp->key_defs;
+	return sp->arity_min;
 }
 
-static inline int
-space_max_fieldno(struct space *sp)
+static inline u32
+space_arity_max(struct space *sp)
 {
-	return sp->max_fieldno;
+	return sp->arity_max;
 }
-
-static inline enum field_data_type
-space_field_type(struct space *sp, int no)
-{
-	return sp->field_types[no];
-}
-
 
 struct space *
-space_create(i32 space_no, struct key_def *key_defs, int key_count, int arity);
+space_create(u32 space_no, u32 arity_min, u32 arity_max);
 
+void
+space_destroy(struct space *space);
+
+static inline const struct field_def *
+space_field_def(struct space *sp, u32 field_no)
+{
+	assert (field_no < sp->arity_min);
+	return &sp->field_defs[field_no];
+}
+
+void
+space_set_field_def(struct space *sp, u32 field_no,
+		    const struct field_def *field_def);
+
+u32
+space_create_index(struct space *sp, enum index_type type,
+		   const struct key_def *index_def);
 
 /** Get index ordinal number in space. */
-static inline int
-index_n(Index *index)
-{
-	return key_def_n(index->space, index->key_def);
-}
+i32
+index_n(Index *index);
 
 /** Check whether or not an index is primary in space.  */
 static inline bool

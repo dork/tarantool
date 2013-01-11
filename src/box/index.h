@@ -29,19 +29,15 @@
  * SUCH DAMAGE.
  */
 #import "object.h"
+
+#include "box/box.h"
+
 #include <stdbool.h>
 #include <util.h>
 
 struct tuple;
 struct space;
 
-/*
- * Possible field data types. Can't use STRS/ENUM macros for them,
- * since there is a mismatch between enum name (STRING) and type
- * name literal ("STR"). STR is already used as Objective C type.
- */
-enum field_data_type { UNKNOWN = -1, NUM = 0, NUM64, STRING, field_data_type_MAX };
-extern const char *field_data_type_strs[];
 
 #define INDEX_TYPE(_)                                             \
 	_(HASH,  0)       /* HASH Index  */                       \
@@ -94,35 +90,13 @@ struct iterator {
 	void (*free)(struct iterator *);
 };
 
-/** Descriptor of a single part in a multipart key. */
-struct key_part {
-	int fieldno;
-	enum field_data_type type;
-};
-
 /* Descriptor of a multipart key. */
 struct key_def {
 	/* Description of parts of a multipart index. */
-	struct key_part *parts;
-	/*
-	 * An array holding field positions in 'parts' array.
-	 * Imagine there is index[1] = { key_field[0].fieldno=5,
-	 * key_field[1].fieldno=3 }.
-	 * 'parts' array for such index contains data from
-	 * key_field[0] and key_field[1] respectively.
-	 * max_fieldno is 5, and cmp_order array holds offsets of
-	 * field 3 and 5 in 'parts' array: -1, -1, 0, -1, 1.
-	 */
-	u32 *cmp_order;
-	/* The size of the 'parts' array. */
-	int part_count;
-	/*
-	 * The size of 'cmp_order' array (= max fieldno in 'parts'
-	 * array).
-	 */
-	int max_fieldno;
+	u32 parts[BOX_INDEX_PARTS_MAX];
+	u32 part_count;
+
 	bool is_unique;
-	enum index_type type;
 };
 
 /** Descriptor of index features. */
@@ -155,18 +129,29 @@ enum dup_replace_mode {
 };
 
 @interface Index: tnt_Object {
+@public
 	/* Index features. */
 	struct index_traits *traits;
- @public
-	/* Index owner space */
+
 	struct space *space;
-	/* Description of a possibly multipart key. */
-	struct key_def *key_def;
+	struct key_def key_def;
+
 	/*
 	 * Pre-allocated iterator to speed up the main case of
 	 * box_process(). Should not be used elsewhere.
 	 */
 	struct iterator *position;
+
+	/*
+	 * An array holding field positions in 'parts' array.
+	 * Imagine there is index[1] = { key_field[0].fieldno=5,
+	 * key_field[1].fieldno=3 }.
+	 * 'parts' array for such index contains data from
+	 * key_field[0] and key_field[1] respectively.
+	 * max_fieldno is 5, and cmp_order array holds offsets of
+	 * field 3 and 5 in 'parts' array: -1, -1, 0, -1, 1.
+	 */
+	u32 *cmp_order;
 };
 
 /**
@@ -180,15 +165,15 @@ enum dup_replace_mode {
  * @param key_def  key part description
  * @param space    space the index belongs to
  */
-+ (Index *) alloc: (enum index_type) type :(struct key_def *) key_def
-	:(struct space *) space;
++ (Index *) alloc :(enum index_type) type :(const struct key_def *) key_def :(struct space *) space;
+
 /**
  * Initialize index instance.
  *
  * @param key_def  key part description
  * @param space    space the index belongs to
  */
-- (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg;
+- (id) init: (const struct key_def *) key_def_arg :(struct space *) space_arg;
 /** Destroy and free index instance. */
 - (void) free;
 /**
@@ -202,8 +187,7 @@ enum dup_replace_mode {
 - (size_t) size;
 - (struct tuple *) min;
 - (struct tuple *) max;
-- (struct tuple *) findByKey: (const void *) key :(int) part_count;
-- (struct tuple *) findByTuple: (struct tuple *) tuple;
+- (struct tuple *) findByKey: (const void *) key :(u32) part_count;
 - (struct tuple *) replace: (struct tuple *) old_tuple
 			  :(struct tuple *) new_tuple
 			  :(enum dup_replace_mode) mode;
@@ -214,12 +198,11 @@ enum dup_replace_mode {
 - (struct iterator *) allocIterator;
 - (void) initIterator: (struct iterator *) iterator
 		     :(enum iterator_type) type
-		     :(void *) key :(int) part_count;
-@end
+		     :(void *) key :(u32) part_count;
 
-void
-check_key_parts(const struct key_def *key_def, int part_count,
-		bool partial_key_allowed);
+- (void) validateKey: (enum iterator_type) type
+      :(const void *) key :(u32) part_count;
+@end
 
 uint32_t
 replace_check_dup(struct tuple *old_tuple,

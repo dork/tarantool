@@ -90,16 +90,16 @@ enum { TNT_ERRMSG_MAX = 512 };
 	/* 35 */_(ER_UNUSED35,			2, "Unused35") \
 	/* 36 */_(ER_UNUSED36,			2, "Unused36") \
 	/* 37 */_(ER_UNUSED37,			2, "Unused37") \
-	/* 38 */_(ER_KEY_FIELD_TYPE,		2, "Supplied key field type does not match index type: expected %s") \
+	/* 38 */_(ER_KEY_FIELD_SIZE,		2, "Space %u field %u: supplied key field size does not match (expected %u, got %u)") \
 	/* 39 */_(ER_WAL_IO,			2, "Failed to write to disk") \
 	/* 40 */_(ER_FIELD_TYPE,		2, "Field type does not match one required by operation: expected a %s") \
 	/* 41 */_(ER_ARG_TYPE,			2, "Argument type in operation does not match field type: expected a %s") \
 	/* 42 */_(ER_SPLICE,			2, "Field SPLICE error: %s") \
 	/* 43 */_(ER_TUPLE_IS_TOO_LONG,		2, "Tuple is too long %u") \
 	/* 44 */_(ER_UNKNOWN_UPDATE_OP,		2, "Unknown UPDATE operation") \
-	/* 45 */_(ER_EXACT_MATCH,		2, "Partial key in an exact match (key field count: %d, expected: %d)") \
+	/* 45 */_(ER_EXACT_MATCH,		2, "Invalid key part count in an exact match (expected %u, got %u)") \
 	/* 46 */_(ER_UNUSED46,			2, "Unused46") \
-	/* 47 */_(ER_KEY_PART_COUNT,		2, "Key part count %d is greater than index part count %d") \
+	/* 47 */_(ER_KEY_PART_COUNT,		2, "Invalid key part count (expected [0..%u], got %u)") \
 	/* 48 */_(ER_PROC_RET,			2, "Return type '%s' is not supported in the binary protocol") \
 	/* 49 */_(ER_TUPLE_NOT_FOUND,		2, "Tuple doesn't exist in index %d") \
 	/* 50 */_(ER_NO_SUCH_PROC,		2, "Procedure '%.*s' is not defined") \

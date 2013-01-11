@@ -464,33 +464,26 @@ memcached_space_init()
         if (cfg.memcached_port == 0)
                 return;
 
+	struct space *sp = space_create(cfg.memcached_space, 1, 4);
+	@try {
+		struct field_def field_def1 = {
+			.type = STRING
+		};
 
-	/* Configure memcached index key. */
-	struct key_def *key_def = malloc(sizeof(struct key_def));
-	key_def->part_count = 1;
-	key_def->is_unique = true;
-	key_def->type = HASH;
+		space_set_field_def(sp, 0, &field_def1);
 
-	key_def->parts = malloc(sizeof(struct key_part));
-	key_def->cmp_order = malloc(sizeof(u32));
+		struct key_def index_def1 = {
+			.parts = { 0 },
+			.part_count = 1,
+			.is_unique = true,
+		};
 
-	if (key_def->parts == NULL || key_def->cmp_order == NULL)
-		panic("out of memory when configuring memcached_space");
-
-	key_def->parts[0].fieldno = 0;
-	key_def->parts[0].type = STRING;
-
-	key_def->max_fieldno = 1;
-	key_def->cmp_order[0] = 0;
-
-
-	struct space *memc_s =
-		space_create(cfg.memcached_space, key_def, 1, 4);
-
-	Index *memc_index = [Index alloc: HASH :key_def :memc_s];
-	space_set_index(memc_s, 0, memc_index);
-
-	[memc_index init: key_def :memc_s];
+		u32 index_no = space_create_index(sp, HASH, &index_def1);
+		assert(index_no == 0);
+	} @catch(tnt_Exception *) {
+		space_destroy(sp);
+		@throw;
+	}
 }
 
 /** Delete a bunch of expired keys. */

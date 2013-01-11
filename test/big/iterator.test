@@ -135,7 +135,7 @@ exec admin "lua iterate(20, 3, 2, 4, box.index.LT, 'tid_996', 'to', 'many', 'key
 
 print """
 #-----------------------------------------------------------------------------#
-# Iterator: hash multi-part non-unique
+# Iterator: hash single-part unique
 #-----------------------------------------------------------------------------#
 """
 

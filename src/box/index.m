@@ -33,28 +33,16 @@
 #include "say.h"
 #include "exception.h"
 #include "space.h"
+#include "pickle.h"
 
 static struct index_traits index_traits = {
 	.allows_partial_key = false,
 };
 
-const char *field_data_type_strs[] = {"NUM", "NUM64", "STR", "\0"};
 STRS(index_type, INDEX_TYPE);
 STRS(iterator_type, ITERATOR_TYPE);
 
 /* {{{ Utilities. **********************************************/
-
-void
-check_key_parts(const struct key_def *key_def,
-		int part_count, bool partial_key_allowed)
-{
-	if (part_count > key_def->part_count)
-		tnt_raise(ClientError, :ER_KEY_PART_COUNT,
-			  part_count, key_def->part_count);
-	if (!partial_key_allowed && part_count < key_def->part_count)
-		tnt_raise(ClientError, :ER_EXACT_MATCH,
-			  part_count, key_def->part_count);
-}
 
 /**
  * Check if replacement of an old tuple with a new one is
@@ -99,9 +87,7 @@ replace_check_dup(struct tuple *old_tuple,
 	return &index_traits;
 }
 
-+ (Index *) alloc: (enum index_type) type
-	 :(struct key_def *) key_def
-	 :(struct space *) space
++ (Index *) alloc :(enum index_type) type :(const struct key_def *) key_def :(struct space *) space
 {
 	switch (type) {
 	case HASH:
@@ -115,15 +101,29 @@ replace_check_dup(struct tuple *old_tuple,
 	return NULL;
 }
 
-- (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg;
+- (id) init: (const struct key_def *) key_def_arg :(struct space *) space_arg
 {
 	self = [super init];
 	if (self == NULL)
 		return NULL;
 
 	traits = [object_getClass(self) traits];
-	key_def = key_def_arg;
 	space = space_arg;
+	key_def = *key_def_arg;
+
+	/* init compare order array */
+	u32 arity_min = space_arity_min(space);
+	cmp_order = calloc(sizeof(*cmp_order), arity_min);
+	u32 arity = space_arity_min(space);
+	for (u32 field = 0; field < arity; field++) {
+		cmp_order[field] = UINT32_MAX;
+	}
+
+	for (u32 part = 0 ; part < key_def.part_count; part++) {
+		u32 field_no = key_def.parts[part];
+		cmp_order[field_no] = part;
+	}
+
 	position = [self allocIterator];
 
 	return self;
@@ -131,6 +131,7 @@ replace_check_dup(struct tuple *old_tuple,
 
 - (void) free
 {
+	free(cmp_order);
 	position->free(position);
 	[super free];
 }
@@ -176,7 +177,50 @@ replace_check_dup(struct tuple *old_tuple,
 	return NULL;
 }
 
-- (struct tuple *) findByKey: (const void *) key :(int) part_count
+- (void) validateKey: (enum iterator_type) type
+      :(const void *) key :(u32) part_count
+{
+	if (part_count == 0 && type == ITER_ALL) {
+		assert(key == NULL);
+		return;
+	}
+
+	if (part_count > self->key_def.part_count)
+		tnt_raise(ClientError, :ER_KEY_PART_COUNT,
+			  self->key_def.part_count, part_count);
+
+	if ((!self->traits->allows_partial_key) &&
+			part_count < self->key_def.part_count) {
+		tnt_raise(ClientError, :ER_EXACT_MATCH,
+			  self->key_def.part_count, part_count);
+	}
+
+	const void *key_data = key;
+	for (u32 part = 0; part < part_count; part++) {
+		u32 field_size = load_varint32(&key_data);
+
+		u32 field_no = self->key_def.parts[part];
+
+		const struct field_def *field_def =
+				space_field_def(self->space, field_no);
+
+		if (field_def->type == NUM && field_size != sizeof(u32)) {
+			tnt_raise(ClientError, :ER_KEY_FIELD_SIZE,
+				  space_n(self->space), field_no,
+				  sizeof(u32), field_size);
+		}
+
+		if (field_def->type == NUM64 && field_size != sizeof(u64)) {
+			tnt_raise(ClientError, :ER_KEY_FIELD_SIZE,
+				  space_n(self->space), field_no,
+				  sizeof(u64), field_size);
+		}
+
+		key_data += field_size;
+	}
+}
+
+- (struct tuple *) findByKey: (const void *) key :(u32) part_count
 {
 	(void) key;
 	(void) part_count;
@@ -211,7 +255,7 @@ replace_check_dup(struct tuple *old_tuple,
 
 - (void) initIterator: (struct iterator *) iterator
 	:(enum iterator_type) type
-	:(void *) key :(int) part_count
+	:(void *) key :(u32) part_count
 {
 	(void) iterator;
 	(void) type;
