@@ -47,36 +47,36 @@
 
 #ifdef SLAB_DEBUG
 #undef NDEBUG
-u8 red_zone[4] = { 0xfa, 0xfa, 0xfa, 0xfa };
+uint8_t red_zone[4] = { 0xfa, 0xfa, 0xfa, 0xfa };
 #else
-u8 red_zone[0] = { };
+uint8_t red_zone[0] = { };
 #endif
 
-const u32 SLAB_MAGIC = 0x51abface;
-const size_t SLAB_SIZE = 1 << 22;
-const size_t MAX_SLAB_ITEM = 1 << 20;
+static const uint32_t SLAB_MAGIC = 0x51abface;
+static const size_t SLAB_SIZE = 1 << 22;
+static const size_t MAX_SLAB_ITEM = 1 << 20;
 
 struct slab_item {
 	struct slab_item *next;
-} __packed__;
+};
 
 struct slab {
-	u32 magic;
+	uint32_t magic;
 	size_t used;
 	size_t items;
 	struct slab_item *free;
-	struct slab_class *class;
+	struct slab_cache *cache;
 	void *brk;
-	 SLIST_ENTRY(slab) link;
-	 SLIST_ENTRY(slab) free_link;
-	 TAILQ_ENTRY(slab) class_free_link;
-	 TAILQ_ENTRY(slab) class_link;
+	SLIST_ENTRY(slab) link;
+	SLIST_ENTRY(slab) free_link;
+	TAILQ_ENTRY(slab) cache_free_link;
+	TAILQ_ENTRY(slab) cache_link;
 };
 
 SLIST_HEAD(slab_slist_head, slab);
 TAILQ_HEAD(slab_tailq_head, slab);
 
-struct slab_class {
+struct slab_cache {
 	size_t item_size;
 	struct slab_tailq_head slabs, free_slabs;
 };
@@ -88,39 +88,37 @@ struct arena {
 	void *base;
 	size_t size;
 	size_t used;
+	struct slab_slist_head slabs, free_slabs;
 };
 
-size_t slab_active_classes;
-struct slab_class slab_classes[256];
-struct arena arena;
-
-struct slab_slist_head slabs, free_slabs;
+static uint32_t slab_active_caches;
+static struct slab_cache slab_caches[256];
+static struct arena arena;
 
 static struct slab *
 slab_header(void *ptr)
 {
-	struct slab *slab = (struct slab *)SLAB_ALIGN_PTR(ptr);
+	struct slab *slab = SLAB_ALIGN_PTR(ptr);
 	assert(slab->magic == SLAB_MAGIC);
 	return slab;
 }
 
 static void
-slab_classes_init(size_t minimal, double factor)
+slab_caches_init(size_t minimal, double factor)
 {
-	int i, size;
+	uint32_t i;
+	size_t size;
 	const size_t ptr_size = sizeof(void *);
 
-	for (i = 0, size = minimal; i < nelem(slab_classes) && size <= MAX_SLAB_ITEM; i++) {
-		slab_classes[i].item_size = size - sizeof(red_zone);
-		TAILQ_INIT(&slab_classes[i].free_slabs);
+	for (i = 0, size = minimal; i < nelem(slab_caches) && size <= MAX_SLAB_ITEM; i++) {
+		slab_caches[i].item_size = size - sizeof(red_zone);
+		TAILQ_INIT(&slab_caches[i].free_slabs);
 
 		size = MAX((size_t)(size * factor) & ~(ptr_size - 1),
 			   (size + ptr_size) & ~(ptr_size - 1));
 	}
 
-	SLIST_INIT(&slabs);
-	SLIST_INIT(&free_slabs);
-	slab_active_classes = i;
+	slab_active_caches = i;
 }
 
 static bool
@@ -138,6 +136,8 @@ arena_init(struct arena *arena, size_t size)
 	}
 
 	arena->base = (char *)SLAB_ALIGN_PTR(arena->mmap_base) + SLAB_SIZE;
+	SLIST_INIT(&arena->slabs);
+	SLIST_INIT(&arena->free_slabs);
 	return true;
 }
 
@@ -165,7 +165,7 @@ salloc_init(size_t size, size_t minimal, double factor)
 	if (!arena_init(&arena, size))
 		return false;
 
-	slab_classes_init(MAX(sizeof(void *), minimal), factor);
+	slab_caches_init(MAX(sizeof(void *), minimal), factor);
 	return true;
 }
 
@@ -179,25 +179,25 @@ salloc_destroy(void)
 }
 
 static void
-format_slab(struct slab_class *class, struct slab *slab)
+format_slab(struct slab_cache *cache, struct slab *slab)
 {
-	assert(class->item_size <= MAX_SLAB_ITEM);
+	assert(cache->item_size <= MAX_SLAB_ITEM);
 
 	slab->magic = SLAB_MAGIC;
 	slab->free = NULL;
-	slab->class = class;
+	slab->cache = cache;
 	slab->items = 0;
 	slab->used = 0;
 	slab->brk = (void *)CACHEALIGN((void *)slab + sizeof(struct slab));
 
-	TAILQ_INSERT_HEAD(&class->slabs, slab, class_link);
-	TAILQ_INSERT_HEAD(&class->free_slabs, slab, class_free_link);
+	TAILQ_INSERT_HEAD(&cache->slabs, slab, cache_link);
+	TAILQ_INSERT_HEAD(&cache->free_slabs, slab, cache_free_link);
 }
 
 static bool
 fully_formatted(struct slab *slab)
 {
-	return slab->brk + slab->class->item_size >= (void *)slab + SLAB_SIZE;
+	return slab->brk + slab->cache->item_size >= (void *)slab + SLAB_SIZE;
 }
 
 void
@@ -205,47 +205,47 @@ slab_validate(void)
 {
 	struct slab *slab;
 
-	SLIST_FOREACH(slab, &slabs, link) {
+	SLIST_FOREACH(slab, &arena.slabs, link) {
 		for (char *p = (char *)slab + sizeof(struct slab);
-		     p + slab->class->item_size < (char *)slab + SLAB_SIZE;
-		     p += slab->class->item_size + sizeof(red_zone)) {
-			assert(memcmp(p + slab->class->item_size, red_zone, sizeof(red_zone)) == 0);
+		     p + slab->cache->item_size < (char *)slab + SLAB_SIZE;
+		     p += slab->cache->item_size + sizeof(red_zone)) {
+			assert(memcmp(p + slab->cache->item_size, red_zone, sizeof(red_zone)) == 0);
 		}
 	}
 }
 
-static struct slab_class *
-class_for(size_t size)
+static struct slab_cache *
+cache_for(size_t size)
 {
-	for (int i = 0; i < slab_active_classes; i++)
-		if (slab_classes[i].item_size >= size)
-			return &slab_classes[i];
+	for (uint32_t i = 0; i < slab_active_caches; i++)
+		if (slab_caches[i].item_size >= size)
+			return &slab_caches[i];
 
 	return NULL;
 }
 
 static struct slab *
-slab_of(struct slab_class *class)
+slab_of(struct slab_cache *cache)
 {
 	struct slab *slab;
 
-	if (!TAILQ_EMPTY(&class->free_slabs)) {
-		slab = TAILQ_FIRST(&class->free_slabs);
+	if (!TAILQ_EMPTY(&cache->free_slabs)) {
+		slab = TAILQ_FIRST(&cache->free_slabs);
 		assert(slab->magic == SLAB_MAGIC);
 		return slab;
 	}
 
-	if (!SLIST_EMPTY(&free_slabs)) {
-		slab = SLIST_FIRST(&free_slabs);
+	if (!SLIST_EMPTY(&arena.free_slabs)) {
+		slab = SLIST_FIRST(&arena.free_slabs);
 		assert(slab->magic == SLAB_MAGIC);
-		SLIST_REMOVE_HEAD(&free_slabs, free_link);
-		format_slab(class, slab);
+		SLIST_REMOVE_HEAD(&arena.free_slabs, free_link);
+		format_slab(cache, slab);
 		return slab;
 	}
 
 	if ((slab = arena_alloc(&arena)) != NULL) {
-		format_slab(class, slab);
-		SLIST_INSERT_HEAD(&slabs, slab, link);
+		format_slab(cache, slab);
+		SLIST_INSERT_HEAD(&arena.slabs, slab, link);
 		return slab;
 	}
 
@@ -264,12 +264,12 @@ valid_item(struct slab *slab, void *item)
 void *
 salloc(size_t size, const char *what)
 {
-	struct slab_class *class;
+	struct slab_cache *cache;
 	struct slab *slab;
 	struct slab_item *item;
 
-	if ((class = class_for(size)) == NULL ||
-	    (slab = slab_of(class)) == NULL) {
+	if ((cache = cache_for(size)) == NULL ||
+	    (slab = slab_of(cache)) == NULL) {
 
 		tnt_raise(LoggedError, :ER_MEMORY_ISSUE, size,
 			  "slab allocator", what);
@@ -278,8 +278,8 @@ salloc(size_t size, const char *what)
 	if (slab->free == NULL) {
 		assert(valid_item(slab, slab->brk));
 		item = slab->brk;
-		memcpy((void *)item + class->item_size, red_zone, sizeof(red_zone));
-		slab->brk += class->item_size + sizeof(red_zone);
+		memcpy((void *)item + cache->item_size, red_zone, sizeof(red_zone));
+		slab->brk += cache->item_size + sizeof(red_zone);
 	} else {
 		assert(valid_item(slab, slab->free));
 		item = slab->free;
@@ -290,12 +290,12 @@ salloc(size_t size, const char *what)
 	}
 
 	if (fully_formatted(slab) && slab->free == NULL)
-		TAILQ_REMOVE(&class->free_slabs, slab, class_free_link);
+		TAILQ_REMOVE(&cache->free_slabs, slab, cache_free_link);
 
-	slab->used += class->item_size + sizeof(red_zone);
+	slab->used += cache->item_size + sizeof(red_zone);
 	slab->items += 1;
 
-	VALGRIND_MALLOCLIKE_BLOCK(item, class->item_size, sizeof(red_zone), 0);
+	VALGRIND_MALLOCLIKE_BLOCK(item, cache->item_size, sizeof(red_zone), 0);
 	return (void *)item;
 }
 
@@ -305,24 +305,24 @@ sfree(void *ptr)
 	if (ptr == NULL)
 		return;
 	struct slab *slab = slab_header(ptr);
-	struct slab_class *class = slab->class;
+	struct slab_cache *cache = slab->cache;
 	struct slab_item *item = ptr;
 
 	if (fully_formatted(slab) && slab->free == NULL)
-		TAILQ_INSERT_TAIL(&class->free_slabs, slab, class_free_link);
+		TAILQ_INSERT_TAIL(&cache->free_slabs, slab, cache_free_link);
 
 	assert(valid_item(slab, item));
 	assert(slab->free == NULL || valid_item(slab, slab->free));
 
 	item->next = slab->free;
 	slab->free = item;
-	slab->used -= class->item_size + sizeof(red_zone);
+	slab->used -= cache->item_size + sizeof(red_zone);
 	slab->items -= 1;
 
 	if (slab->items == 0) {
-		TAILQ_REMOVE(&class->free_slabs, slab, class_free_link);
-		TAILQ_REMOVE(&class->slabs, slab, class_link);
-		SLIST_INSERT_HEAD(&free_slabs, slab, free_link);
+		TAILQ_REMOVE(&cache->free_slabs, slab, cache_free_link);
+		TAILQ_REMOVE(&cache->slabs, slab, cache_link);
+		SLIST_INSERT_HEAD(&arena.free_slabs, slab, free_link);
 	}
 
 	VALGRIND_FREELIKE_BLOCK(item, sizeof(red_zone));
@@ -347,11 +347,11 @@ salloc_stat(salloc_stat_cb cb, struct slab_arena_stats *astat, void *cb_ctx)
 
 	if (cb) {
 		struct slab *slab;
-		struct slab_class_stats st;
+		struct slab_cache_stats st;
 
-		for (int i = 0; i < slab_active_classes; i++) {
+		for (int i = 0; i < slab_active_caches; i++) {
 			memset(&st, 0, sizeof(st));
-			TAILQ_FOREACH(slab, &slab_classes[i].slabs, class_link)
+			TAILQ_FOREACH(slab, &slab_caches[i].slabs, cache_link)
 			{
 				st.slabs++;
 				st.items += slab->items;
@@ -361,7 +361,7 @@ salloc_stat(salloc_stat_cb cb, struct slab_arena_stats *astat, void *cb_ctx)
 				st.bytes_used += sizeof(struct slab);
 				st.bytes_used += slab->used;
 			}
-			st.item_size = slab_classes[i].item_size;
+			st.item_size = slab_caches[i].item_size;
 
 			if (st.slabs == 0)
 				continue;

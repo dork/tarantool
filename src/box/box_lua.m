@@ -718,15 +718,14 @@ lbox_create_iterator(struct lua_State *L)
 			say_warn("Field_count: %u %u",
 				 field_count, index->key_def.part_count);
 			struct tbuf *data = tbuf_alloc(fiber->gc_pool);
-			for (int i = 3; i <= argc; i++) {
-				u32 part = i-3;
+			for (u32 i = 0; i < field_count; i++) {
 				enum field_data_type type = UNKNOWN;
-				if (part < index->key_def.part_count) {
-					u32 field_no = index->key_def.parts[i-3];
+				if (i < index->key_def.part_count) {
+					u32 field_no = index->key_def.parts[i];
 					type = space_field_def(index->space,
 							       field_no)->type;
 				}
-				append_key_part(L, i, data, type);
+				append_key_part(L, i + 3, data, type);
 			}
 			key = data->data;
 		}
@@ -831,11 +830,15 @@ lbox_index_count(struct lua_State *L)
 		/* Single or multi- part key. */
 		key_part_count = argc;
 		struct tbuf *data = tbuf_alloc(fiber->gc_pool);
-		for (int i = 0; i < argc; ++i) {
-			enum field_data_type type = space_field_def(
-				index->space, index->key_def.parts[i])->type;
-			append_key_part(L, i + 2, data,
-					type);
+		u32 part_count = argc;
+		for (u32 i = 0; i < part_count; ++i) {
+			enum field_data_type type = UNKNOWN;
+			if (i < index->key_def.part_count) {
+				u32 field_no = index->key_def.parts[i];
+				type = space_field_def(index->space,
+						       field_no)->type;
+			}
+			append_key_part(L, i + 2, data, type);
 		}
 		key = data->data;
 	}
