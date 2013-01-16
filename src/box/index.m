@@ -29,7 +29,7 @@
 #include "index.h"
 #include "hash_index.h"
 #include "tree_index.h"
-#include "index_bitset.h"
+#include "bitset_index.h"
 #include "say.h"
 #include "tuple.h"
 #include "say.h"

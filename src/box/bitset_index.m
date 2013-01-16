@@ -27,7 +27,7 @@
  * SUCH DAMAGE.
  */
 
-#include "index_bitset.h"
+#include "bitset_index.h"
 
 #include <string.h>
 #include <errno.h> // for tnt_raise messages
