@@ -782,6 +782,13 @@ wal_schedule(ev_watcher *watcher, int event __attribute__((unused)))
 	(void) tt_pthread_mutex_unlock(&writer->mutex);
 
 	wal_schedule_queue(&commit);
+	/*
+	 * Perform a cascading abort of all transactions which
+	 * depend on the transaction which failed to get written
+	 * to the write ahead log. Abort transactions
+	 * in reverse order, performing a playback of the
+	 * in-memory database state.
+	 */
 	STAILQ_REVERSE(&rollback, wal_write_request, wal_fifo_entry);
 	wal_schedule_queue(&rollback);
 }
@@ -996,7 +1003,7 @@ wal_fill_batch(struct log_io *wal, struct fio_batch *batch, int rows_per_wal,
 	       struct wal_write_request *req)
 {
 	int max_rows = wal->is_inprogress ? 1 : rows_per_wal - wal->rows;
-	/* Post-condition of successful by wal_opt_rotate(). */
+	/* Post-condition of successful wal_opt_rotate(). */
 	assert(max_rows > 0);
 	fio_batch_start(batch, max_rows);
 	while (req != NULL && ! fio_batch_is_full(batch)) {

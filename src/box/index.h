@@ -34,7 +34,6 @@
 
 struct tuple;
 struct space;
-struct index;
 
 /*
  * Possible field data types. Can't use STRS/ENUM macros for them,
@@ -44,7 +43,12 @@ struct index;
 enum field_data_type { UNKNOWN = -1, NUM = 0, NUM64, STRING, field_data_type_MAX };
 extern const char *field_data_type_strs[];
 
-enum index_type { HASH, TREE, BITSET, index_type_MAX };
+#define INDEX_TYPE(_)                                               \
+	_(HASH,    0)       /* HASH Index  */                       \
+	_(TREE,    1)       /* TREE Index  */                       \
+	_(BITSET,  2)       /* BITSET Index  */                     \
+
+ENUM(index_type, INDEX_TYPE);
 extern const char *index_type_strs[];
 
 /**
@@ -90,6 +94,11 @@ iterator_type_is_reverse(enum iterator_type type)
 	return type == ITER_REQ || type == ITER_LT || type == ITER_LE;
 }
 
+struct iterator {
+	struct tuple *(*next)(struct iterator *);
+	void (*free)(struct iterator *);
+};
+
 /** Descriptor of a single part in a multipart key. */
 struct key_part {
 	int fieldno;
@@ -125,6 +134,29 @@ struct key_def {
 struct index_traits
 {
 	bool allows_partial_key;
+};
+
+/**
+ * The manner in which replace in a unique index must treat
+ * duplicates (tuples with the same value of indexed key),
+ * possibly present in the index.
+ */
+enum dup_replace_mode {
+        /**
+	 * If a duplicate is found, delete it and insert
+	 * a new tuple instead. Otherwise, insert a new tuple.
+         */
+	DUP_REPLACE_OR_INSERT,
+	/**
+	 * If a duplicate is found, produce an error.
+	 * I.e. require that no old key exists with the same
+	 * value.
+         */
+	DUP_INSERT,
+	/**
+	 * Unless a duplicate exists, throw an error.
+	 */
+	DUP_REPLACE
 };
 
 @interface Index: tnt_Object {
@@ -175,10 +207,11 @@ struct index_traits
 - (size_t) size;
 - (struct tuple *) min;
 - (struct tuple *) max;
-- (struct tuple *) findByKey: (void *) key :(int) part_count;
+- (struct tuple *) findByKey: (const void *) key :(int) part_count;
 - (struct tuple *) findByTuple: (struct tuple *) tuple;
-- (void) remove: (struct tuple *) tuple;
-- (void) replace: (struct tuple *) old_tuple :(struct tuple *) new_tuple;
+- (struct tuple *) replace: (struct tuple *) old_tuple
+			  :(struct tuple *) new_tuple
+			  :(enum dup_replace_mode) mode;
 /**
  * Create a structure to represent an iterator. Must be
  * initialized separately.
@@ -187,23 +220,15 @@ struct index_traits
 - (void) initIterator: (struct iterator *) iterator
 		     :(enum iterator_type) type
 		     :(void *) key :(int) part_count;
-
-/**
- * Unsafe search methods that do not check key part count.
- */
-- (struct tuple *) findUnsafe: (void *) key :(int) part_count;
-#if defined(DEBUG)
-- (void) debugDump:(int) verbose;
-#endif /* defined(DEBUG) */
 @end
 
-struct iterator {
-	struct tuple *(*next)(struct iterator *);
-	void (*free)(struct iterator *);
-};
-
 void
-check_key_parts(struct key_def *key_def, int part_count,
+check_key_parts(const struct key_def *key_def, int part_count,
 		bool partial_key_allowed);
+
+uint32_t
+replace_check_dup(struct tuple *old_tuple,
+		  struct tuple *dup_tuple,
+		  enum dup_replace_mode mode);
 
 #endif /* TARANTOOL_BOX_INDEX_H_INCLUDED */

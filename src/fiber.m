@@ -54,7 +54,7 @@ __thread struct fiber *fiber = &sched;
 static __thread struct fiber *call_stack[FIBER_CALL_STACK];
 static __thread struct fiber **sp;
 static __thread uint32_t last_used_fid;
-static __thread struct mh_i32ptr_t *fibers_registry;
+static __thread struct mh_i32ptr_t *fiber_registry;
 static __thread struct rlist fibers, zombie_fibers, ready_fibers;
 static __thread ev_async ready_async;
 
@@ -302,13 +302,11 @@ struct fiber *
 fiber_find(int fid)
 {
 	struct mh_i32ptr_node_t node = { .key = fid };
-	mh_int_t k = mh_i32ptr_get(fibers_registry, &node, NULL, NULL);
+	mh_int_t k = mh_i32ptr_get(fiber_registry, &node, NULL, NULL);
 
-	if (k == mh_end(fibers_registry))
+	if (k == mh_end(fiber_registry))
 		return NULL;
-	if (!mh_exist(fibers_registry, k))
-		return NULL;
-	return mh_i32ptr_node(fibers_registry, k)->val;
+	return mh_i32ptr_node(fiber_registry, k)->val;
 }
 
 static void
@@ -316,15 +314,14 @@ register_fid(struct fiber *fiber)
 {
 	int ret;
 	struct mh_i32ptr_node_t node = { .key = fiber -> fid, .val = fiber };
-	mh_i32ptr_put(fibers_registry, &node, NULL, NULL, &ret);
+	mh_i32ptr_put(fiber_registry, &node, NULL, NULL, &ret);
 }
 
 static void
 unregister_fid(struct fiber *fiber)
 {
 	struct mh_i32ptr_node_t node = { .key = fiber->fid };
-	mh_int_t k = mh_i32ptr_get(fibers_registry, &node, NULL, NULL);
-	mh_i32ptr_del(fibers_registry, k, NULL, NULL);
+	mh_i32ptr_remove(fiber_registry, &node, NULL, NULL);
 }
 
 void
@@ -432,6 +429,7 @@ fiber_create(const char *name, void (*f) (va_list))
 	if (++last_used_fid < 100)
 		last_used_fid = 100;
 	fiber->fid = last_used_fid;
+	fiber->sid = 0;
 	fiber->flags = 0;
 	fiber->waiter = NULL;
 	fiber_set_name(fiber, name);
@@ -505,7 +503,7 @@ fiber_init(void)
 	rlist_init(&fibers);
 	rlist_init(&ready_fibers);
 	rlist_init(&zombie_fibers);
-	fibers_registry = mh_i32ptr_init();
+	fiber_registry = mh_i32ptr_init();
 
 	memset(&sched, 0, sizeof(sched));
 	sched.fid = 1;
@@ -527,8 +525,8 @@ fiber_free(void)
 {
 	ev_async_stop(&ready_async);
 	/* Only clean up if initialized. */
-	if (fibers_registry) {
+	if (fiber_registry) {
 		fiber_destroy_all();
-		mh_i32ptr_destroy(fibers_registry);
+		mh_i32ptr_destroy(fiber_registry);
 	}
 }

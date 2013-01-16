@@ -29,7 +29,7 @@
 #include "box_lua.h"
 #include "lua/init.h"
 #include <fiber.h>
-#include "box.h"
+#include "box/box.h"
 #include "request.h"
 #include "txn.h"
 
@@ -150,7 +150,7 @@ lbox_tuple_slice(struct lua_State *L)
 	int stop = end - 1;
 
 	while (field < tuple->data + tuple->bsize) {
-		size_t len = load_varint32((void **) &field);
+		size_t len = load_varint32((const void **) &field);
 		if (fieldno >= start) {
 			lua_pushlstring(L, (char *) field, len);
 			if (fieldno == stop)
@@ -183,8 +183,8 @@ transform_calculate(struct lua_State *L, struct tuple *tuple,
 		    size_t lr[2])
 {
 	/* calculate size of the new tuple */
-	void *tuple_end = tuple->data + tuple->bsize;
-	void *tuple_field = tuple->data;
+	const void *tuple_end = tuple->data + tuple->bsize;
+	const void *tuple_field = tuple->data;
 
 	lr[0] = tuple_range_size(&tuple_field, tuple_end, offset);
 
@@ -321,7 +321,7 @@ tuple_find(struct lua_State *L, struct tuple *tuple, size_t offset,
 		return 0;
 	u8 *field = tuple_field(tuple, idx);
 	while (field < tuple->data + tuple->bsize) {
-		size_t len = load_varint32((void **) &field);
+		size_t len = load_varint32((const void **) &field);
 		if (len == key_size && (memcmp(field, key, len) == 0)) {
 			lua_pushinteger(L, idx);
 			if (!all)
@@ -387,10 +387,10 @@ static int
 lbox_tuple_unpack(struct lua_State *L)
 {
 	struct tuple *tuple = lua_checktuple(L, 1);
-	u8 *field = tuple->data;
+	const u8 *field = tuple->data;
 
 	while (field < tuple->data + tuple->bsize) {
-		size_t len = load_varint32((void **) &field);
+		size_t len = load_varint32((const void **) &field);
 		lua_pushlstring(L, (char *) field, len);
 		field += len;
 	}
@@ -415,7 +415,7 @@ lbox_tuple_index(struct lua_State *L)
 		if (i >= tuple->field_count)
 			luaL_error(L, "%s: index %d is out of bounds (0..%d)",
 				   tuplelib_name, i, tuple->field_count-1);
-		void *field = tuple_field(tuple, i);
+		const void *field = tuple_field(tuple, i);
 		u32 len = load_varint32(&field);
 		lua_pushlstring(L, field, len);
 		return 1;
@@ -474,7 +474,7 @@ lbox_tuple_next(struct lua_State *L)
 	(void)field;
 	assert(field >= tuple->data);
 	if (field < tuple->data + tuple->bsize) {
-		len = load_varint32((void **) &field);
+		len = load_varint32((const void **) &field);
 		lua_pushlightuserdata(L, field + len);
 		lua_pushlstring(L, (char *) field, len);
 		return 2;
@@ -716,9 +716,13 @@ lbox_create_iterator(struct lua_State *L)
 			/* Single or multi- part key. */
 			field_count = argc - 2;
 			struct tbuf *data = tbuf_alloc(fiber->gc_pool);
-			for (int i = 3; i <= argc; i++)
-				append_key_part(L, i, data,
-						index->key_def->parts[i-3].type);
+			for (int i = 0; i < field_count; i++) {
+				enum field_data_type type = UNKNOWN;
+				if (i < index->key_def->part_count) {
+					type = index->key_def->parts[i].type;
+				}
+				append_key_part(L, i + 3, data, type);
+			}
 			key = data->data;
 		}
 		/*
@@ -824,9 +828,13 @@ lbox_index_count(struct lua_State *L)
 		/* Single or multi- part key. */
 		key_part_count = argc;
 		struct tbuf *data = tbuf_alloc(fiber->gc_pool);
-		for (int i = 0; i < argc; ++i)
-			append_key_part(L, i + 2, data,
-					index->key_def->parts[i].type);
+		for (int i = 0; i < argc; ++i) {
+			enum field_data_type type = UNKNOWN;
+			if (i < index->key_def->part_count) {
+				type = index->key_def->parts[i].type;
+			}
+			append_key_part(L, i + 2, data, type);
+		}
 		key = data->data;
 	}
 	u32 count = 0;
@@ -835,11 +843,9 @@ lbox_index_count(struct lua_State *L)
 	[index initIterator: it :ITER_EQ :key :key_part_count];
 	/* iterating over the index and counting tuples */
 	struct tuple *tuple;
-	while ((tuple = it->next(it)) != NULL) {
-		if (tuple->flags & GHOST)
-			continue;
+	while ((tuple = it->next(it)) != NULL)
 		count++;
-	}
+
 	/* returning subtree size */
 	lua_pushnumber(L, count);
 	return 1;
@@ -1150,7 +1156,7 @@ lbox_process(lua_State *L)
 	size_t allocated_size = palloc_allocated(fiber->gc_pool);
 	struct port *port_lua = port_lua_create(L);
 	@try {
-		mod_process(port_lua, op, &req);
+		box_process(port_lua, op, &req);
 	} @finally {
 		/*
 		 * This only works as long as port_lua doesn't

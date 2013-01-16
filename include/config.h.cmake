@@ -94,6 +94,29 @@
  * Defined if this is a big-endian system.
  */
 #cmakedefine HAVE_BYTE_ORDER_BIG_ENDIAN 1
+
+/*
+ * Set if compiler has __builtin_XXX methods.
+ */
+#cmakedefine HAVE_CTZ 1
+#cmakedefine HAVE_CTZLL 1
+#cmakedefine HAVE_CLZ 1
+#cmakedefine HAVE_CLZLL 1
+#cmakedefine HAVE_POPCOUNT 1
+#cmakedefine HAVE_POPCOUNTLL 1
+#cmakedefine HAVE_BSWAP32 1
+#cmakedefine HAVE_BSWAP64 1
+
+/*
+ * pthread have problems with -std=c99
+ */
+#cmakedefine HAVE_NON_C99_PTHREAD_H 1
+
+#cmakedefine ENABLE_BUNDLED_LIBOBJC 1
+#cmakedefine ENABLE_BUNDLED_LIBEV 1
+#cmakedefine ENABLE_BUNDLED_LIBEIO 1
+#cmakedefine ENABLE_BUNDLED_LIBCORO 1
+
 /*
  * predefined /etc directory prefix.
  */
@@ -102,8 +125,11 @@
 #define BUILD_TYPE "@CMAKE_BUILD_TYPE@"
 #define BUILD_INFO "@TARANTOOL_BUILD@"
 #define BUILD_OPTIONS "cmake . @TARANTOOL_OPTIONS@"
-#define COMPILER_INFO "@TARANTOOL_COMPILER@"
-#define COMPILER_CFLAGS "@CMAKE_C_FLAGS@ @core_cflags@"
+#define COMPILER_INFO "@CMAKE_C_COMPILER@ @CMAKE_CXX_COMPILER@"
+#define COMPILER_C_FLAGS "@CMAKE_C_FLAGS@"
+#define COMPILER_CXX_FLAGS "@CMAKE_CXX_FLAGS@"
+#define COMPILER_OBJC_FLAGS "@CMAKE_C_FLAGS@ @CMAKE_OBJC_FLAGS@"
+#define COMPILER_OBJCXX_FLAGS "@CMAKE_CXX_FLAGS@ @CMAKE_OBJCXX_FLAGS@"
 /*
  * vim: syntax=c
  */

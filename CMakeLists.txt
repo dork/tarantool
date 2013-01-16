@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 2.6)
 
 project(tarantool)
 
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+set(CMAKE_INCLUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_INCLUDE_PATH})
+
 include(CheckLibraryExists)
 include(CheckIncludeFile)
 include(CheckCCompilerFlag)
@@ -43,21 +46,16 @@ if(NOT CMAKE_BUILD_TYPE)
         FORCE)
 endif()
 
+set(CMAKE_OBJC_FLAGS)
+set(CMAKE_OBJCXX_FLAGS)
+
+include(cmake/utils.cmake)
+
 # the order is significant: we need to know os and compiler to configure libs
 include(cmake/arch.cmake)
 include(cmake/os.cmake)
 include(cmake/compiler.cmake)
-
-# 
-# Since we *optionally* build bundled libs, a direct build
-# dependency between tarantool_box and libluajit/libobjc won't
-# wor: dadd an empty custom target for this dependency instead.
-# If a bundled objc or luajit is built, it is added to the
-# dependency list of build_bundled_libs target.
-#
-add_custom_target(build_bundled_libs)
-include(cmake/libobjc.cmake)
-include(cmake/luajit.cmake)
+include(cmake/profile.cmake)
 
 check_symbol_exists(MAP_ANON sys/mman.h HAVE_MAP_ANON)
 check_symbol_exists(MAP_ANONYMOUS sys/mman.h HAVE_MAP_ANONYMOUS)
@@ -76,6 +74,27 @@ check_function_exists(memrchr HAVE_MEMRCHR)
 # stack. Find whether or not it's present.
 check_library_exists("" __libc_stack_end "" HAVE_LIBC_STACK_END)
 
+set(HAVE_NON_C99_PTHREAD_H 0)
+if (CMAKE_COMPILER_IS_GNUCC)
+
+    set(CMAKE_REQUIRED_FLAGS "-std=gnu99 -Wall -fexceptions -pthread")
+    check_symbol_exists(__pthread_cleanup_routine pthread.h test1)
+
+    set(HAVE_NON_C99_PTHREAD_H OFF)
+    if (test1)
+        try_compile(HAVE_NON_C99_PTHREAD_H ${CMAKE_BINARY_DIR} 
+            ${CMAKE_SOURCE_DIR}/cmake/pthread-broken-inline-test.c
+            COMPILE_DEFINITIONS "-std=gnu99 -Wall -fexceptions")
+    endif()
+    unset(test1)
+
+    if (HAVE_NON_C99_PTHREAD_H)
+        message(WARNING "The system pthread.h is not compatible with the C99 mode."
+            "A special workaround will be used during compilation."
+            "If it does not work for you, please update system glibc.")
+    endif()
+endif()
+
 # CMake's check_function_exists doesn't check builtins
 check_c_source_runs("int main(int a) { __builtin_ctz(a); return 0; }"
     HAVE_CTZ)
@@ -89,9 +108,13 @@ check_c_source_runs("int main(int a) { __builtin_popcount(a); return 0; }"
     HAVE_POPCOUNT)
 check_c_source_runs("int main(int a) { __builtin_popcountll(a); return 0; }"
     HAVE_POPCOUNTLL)
+check_c_source_runs("int main(int a) { __builtin_bswap32(a); return 0; }"
+    HAVE_BSWAP32)
+check_c_source_runs("int main(int a) { __builtin_bswap64(a); return 0; }"
+    HAVE_BSWAP64)
 
 if ((CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64") AND CC_HAS_SSE2_INTRINSICS)
-    # every amd64 supports sse2 instructions
+    # any amd64 supports sse2 instructions
     option(ENABLE_SSE2 "Enable compile-time SSE2 support." ON)
 else()
     option(ENABLE_SSE2 "Enable compile-time SSE2 support." OFF)
@@ -101,7 +124,7 @@ if (ENABLE_SSE2)
     if (!CC_HAS_SSE2_INTRINSICS)
         message( SEND_ERROR "SSE2 is enabled, but is not supported by compiler.")
     else()
-        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2")
+        add_compile_flags("C;CXX" "-msse2")
         message(STATUS "SSE2 is enabled - target CPU must support it")
     endif()
 endif()
@@ -112,11 +135,10 @@ if (ENABLE_AVX)
     if (!CC_HAS_AVX_INTRINSICS)
         message(SEND_ERROR "AVX is enabled")
     else()
-        set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mavx")
+        add_compile_flags("C;CXX" "-mavx")
         message(STATUS "AVX is enabled - target CPU must support it")
     endif()
 endif()
-
 
 #
 # Enable 'make TAGS' target.
@@ -150,7 +172,6 @@ endif()
 include_directories("${PROJECT_SOURCE_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_BINARY_DIR}/include")
-include_directories("${PROJECT_SOURCE_DIR}/connector/c/include")
 #
 # Specify prefixes
 #
@@ -172,17 +193,6 @@ option(ENABLE_DOC "Enable building of documentation" OFF)
 option(ENABLE_CLIENT "Enable building of console client" OFF)
 if (ENABLE_CLIENT)
     set (TARANTOOL_CLIENTS ${TARANTOOL_CLIENTS} "tarantool")
-endif()
-
-option(ENABLE_GCOV "Enable integration with gcov, a code coverage program" OFF)
-if (ENABLE_GCOV)
-    check_library_exists (gcov __gcov_flush  ""  HAVE_GCOV)
-    if (NOT HAVE_GCOV)
-        message (FATAL_ERROR
-                 "ENABLE_GCOV option requested but gcov library is not found")
-    endif()
-    set (GCOV_C_FLAGS "-fprofile-arcs -ftest-coverage")
-    set (GCOV_LDFLAGS "-fprofile-arcs -ftest-coverage")
 endif()
 
 option(ENABLE_TRACE "Enable debug trace of tarantool_box execution to
@@ -214,10 +224,126 @@ endif()
 
 option(ENABLE_STATIC "Perform static linking whenever possible." OFF)
 if (ENABLE_STATIC)
-    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
+    add_compile_flags("C;CXX" "-static")
 endif()
 
-add_subdirectory(third_party)
+##
+## Third-Party libraries
+##
+
+#
+# Since we *optionally* build bundled libs, a direct build
+# dependency between tarantool_box and libluajit/libobjc won't
+# work: add an empty custom target for this dependency instead.
+# If a bundled objc or luajit is built, it is added to the
+# dependency list of build_bundled_libs target.
+#
+
+add_custom_target(build_bundled_libs)
+
+#
+# LibLUAJIT
+#
+include(luajit)
+
+#
+# LibOBJC
+#
+option(ENABLE_BUNDLED_LIBOBJC "Enable building of the bundled libobjc" ON)
+
+if (ENABLE_BUNDLED_LIBOBJC)
+    include(BuildLibOBJC)
+    libobjc_build()
+    add_dependencies(build_bundled_libs objc)
+    set(HAVE_LIBOBJC_BUNDLED ON)
+    include_directories(${LIBOBJC_INCLUDE_DIR})
+else()
+    if (CMAKE_COMPILER_IS_GNUCC)
+        # Use compiler's objc library
+        add_compile_flags("OBJC;OBJCXX" "-objc")
+        set(LIBOBJC_LIBRARIES objc)
+        message(STATUS "Use gcc Objective-C runtime")
+    else()
+        set(LIBOBJC_FIND_REQUIRED ON)
+        find_package(LibOBJC)
+    endif()
+endif()
+
+
+#
+# LibEV
+#
+
+#
+# Currently our code uses libev with #define EV_MULTIPLICITY 0.
+# This option means that libev has a global variable with
+# struct ev_loop data.
+# Such design is not compatible with the dynamic version of libev
+# provided by distros.
+set(ENABLE_BUNDLED_LIBEV ON)
+include(BuildLibEV)
+libev_build()
+add_dependencies(build_bundled_libs ev)
+include_directories(${LIBEV_INCLUDE_DIR})
+
+#
+# LibEIO
+#
+option(ENABLE_BUNDLED_LIBEIO "Enable building of the bundled libeio" ON)
+
+if (ENABLE_BUNDLED_LIBEIO)
+    include(BuildLibEIO)
+    libeio_build()
+    add_dependencies(build_bundled_libs eio)
+else()
+    set(LIBEIO_FIND_REQUIRED ON)
+    find_package(LibEIO)
+endif()
+
+include_directories(${LIBEIO_INCLUDE_DIR})
+
+#
+# LibCORO
+#
+
+#
+# Tarantool uses 'coro' (coroutines) library to implement
+# cooperative multi-tasking. Since coro.h is included
+# universally, define the underlying implementation switch
+# in the top level CMakeLists.txt, to ensure a consistent
+# header file layout across the entire project.
+#
+set(ENABLE_BUNDLED_LIBCORO ON)
+include(BuildLibCORO)
+libcoro_build()
+add_dependencies(build_bundled_libs coro)
+include_directories(${LIBCORO_INCLUDE_DIR})
+
+if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "86" OR ${CMAKE_SYSTEM_PROCESSOR} MATCHES "amd64")
+    add_definitions("-DCORO_ASM")
+else()
+    add_definitions("-DCORO_SJLJ")
+endif()
+
+#
+# LibGOPT
+#
+
+include(BuildLibGOPT)
+libgopt_build()
+add_dependencies(build_bundled_libs gopt)
+
+include_directories(${LIBGOPT_INCLUDE_DIR})
+
+#
+# Third-Party misc
+#
+
+include(BuildMisc)
+libmisc_build()
+add_dependencies(build_bundled_libs misc)
+
+
 add_subdirectory(cfg)
 add_subdirectory(connector)
 add_subdirectory(src)
@@ -234,11 +360,12 @@ include (cmake/cpack.cmake)
 # tarantool info summary (used in server version output)
 #
 set(TARANTOOL_OPTIONS "-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
-set(TARANTOOL_OPTIONS "${TARANTOOL_OPTIONS} -DENABLE_STATIC=${ENABLE_STATIC} -DENABLE_GCOV=${ENABLE_GCOV}")
+set(TARANTOOL_OPTIONS "${TARANTOOL_OPTIONS} -DENABLE_STATIC=${ENABLE_STATIC}")
 set(TARANTOOL_OPTIONS "${TARANTOOL_OPTIONS} -DENABLE_TRACE=${ENABLE_TRACE} -DENABLE_BACKTRACE=${ENABLE_BACKTRACE}")
 set(TARANTOOL_OPTIONS "${TARANTOOL_OPTIONS} -DENABLE_CLIENT=${ENABLE_CLIENT}")
 set(TARANTOOL_BUILD "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_BUILD_TYPE}")
-set(TARANTOOL_COMPILER ${CMAKE_C_COMPILER})
+set(TARANTOOL_C_COMPILER ${CMAKE_C_COMPILER})
+set(TARANTOOL_CXX_COMPILER ${CMAKE_CXX_COMPILER})
 
 #
 # Output compile-time defines into config.h. Do it at the end
@@ -262,18 +389,27 @@ message (STATUS "Tarantool configuration is complete:")
 message (STATUS "")
 message (STATUS "VERSION: ${PACKAGE_VERSION}")
 message (STATUS "BUILD: ${TARANTOOL_BUILD}")
-message (STATUS "COMPILER: ${TARANTOOL_COMPILER}")
-message (STATUS "CFLAGS:${CMAKE_C_FLAGS} ${core_cflags}")
+message (STATUS "C_COMPILER: ${TARANTOOL_C_COMPILER}")
+message (STATUS "CXX_COMPILER: ${TARANTOOL_CXX_COMPILER}")
+message (STATUS "C_FLAGS:${CMAKE_C_FLAGS} ${TARANTOOL_C_FLAGS}")
+message (STATUS "CXX_FLAGS:${CMAKE_CXX_FLAGS} ${TARANTOOL_CXX_FLAGS}")
+message (STATUS "OBJC_FLAGS:${CMAKE_C_FLAGS} ${CMAKE_OBJC_FLAGS}")
+message (STATUS "OBJCXX_FLAGS:${CMAKE_CXX_FLAGS} ${CMAKE_OBJCXX_FLAGS}")
 message (STATUS "PREFIX: ${CMAKE_INSTALL_PREFIX}")
 message (STATUS "MODULES: ${TARANTOOL_MODULES}")
 message (STATUS "ENABLE_STATIC: ${ENABLE_STATIC}")
-message (STATUS "ENABLE_SSE2: ${ENABLE_AVX}")
-message (STATUS "ENABLE_AVX: ${ENABLE_SSE2}")
+message (STATUS "ENABLE_SSE2: ${ENABLE_SSE2}")
+message (STATUS "ENABLE_AVX: ${ENABLE_AVX}")
 message (STATUS "ENABLE_GCOV: ${ENABLE_GCOV}")
+message (STATUS "ENABLE_GPROF: ${ENABLE_GPROF}")
 message (STATUS "ENABLE_TRACE: ${ENABLE_TRACE}")
 message (STATUS "ENABLE_BACKTRACE: ${ENABLE_BACKTRACE} (symbol resolve: ${HAVE_BFD})")
 message (STATUS "ENABLE_CLIENT: ${ENABLE_CLIENT}")
 message (STATUS "ENABLE_BUNDLED_LUAJIT: ${ENABLE_BUNDLED_LUAJIT}")
+message (STATUS "ENABLE_BUNDLED_LIBOBJC: ${ENABLE_BUNDLED_LIBOBJC}")
+message (STATUS "ENABLE_BUNDLED_LIBEV: ${ENABLE_BUNDLED_LIBEV}")
+message (STATUS "ENABLE_BUNDLED_LIBEIO: ${ENABLE_BUNDLED_LIBEIO}")
+message (STATUS "ENABLE_BUNDLED_LIBCORO: ${ENABLE_BUNDLED_LIBCORO}")
 message (STATUS "ENABLE_DOC: ${ENABLE_DOC}")
 message (STATUS "")
 message (STATUS "To view or modify configuration results, check out CMakeCache.txt.")

@@ -44,7 +44,7 @@
 
 #include <third_party/tree.h>
 
-#include "bit.h"
+#include <lib/bit/bit.h>
 
 #if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
 #include <immintrin.h>

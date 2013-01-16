@@ -28,7 +28,7 @@
  */
 
 #include "index.h"
-
+#include <stdio.h>
 #include "bitset_p.h"
 
 struct bitset_index {
@@ -116,7 +116,7 @@ bitset_index_reserve(struct bitset_index *index, size_t bits_required)
 }
 
 int
-bitset_index_insert(struct bitset_index *index, void *key, size_t key_size,
+bitset_index_insert(struct bitset_index *index, const void *key, size_t key_size,
 		    size_t value)
 {
 	const size_t bits_required = 1 + key_size * CHAR_BIT;
@@ -196,7 +196,7 @@ bitset_index_iterate_all(struct bitset_index *index,
 int
 bitset_index_iterate_equals(struct bitset_index *index,
 			    struct bitset_expr *expr,
-			    void *key, size_t key_size)
+			    const void *key, size_t key_size)
 {
 	assert (index != NULL);
 	assert (expr != NULL);
@@ -242,7 +242,7 @@ bitset_index_iterate_equals(struct bitset_index *index,
 static inline int
 bitset_index_iterate_all_set2(struct bitset_index *index,
 			      struct bitset_expr *expr,
-			      void *key, size_t key_size,
+			      const void *key, size_t key_size,
 			      enum bitset_unary_op pre_op)
 {
 	assert (index != NULL);
@@ -270,8 +270,6 @@ bitset_index_iterate_all_set2(struct bitset_index *index,
 			index->bitsets[pos+1], pre_op) != 0) {
 			return -1;
 		}
-
-		pos++;
 	}
 
 	return 0;
@@ -280,7 +278,7 @@ bitset_index_iterate_all_set2(struct bitset_index *index,
 int
 bitset_index_iterate_all_set(struct bitset_index *index,
 			     struct bitset_expr *expr,
-			     void *key, size_t key_size)
+			     const void *key, size_t key_size)
 {
 	return bitset_index_iterate_all_set2(index, expr, key, key_size,
 					    BITSET_OP_NULL);
@@ -289,7 +287,7 @@ bitset_index_iterate_all_set(struct bitset_index *index,
 int
 bitset_index_iterate_all_not_set(struct bitset_index *index,
 				 struct bitset_expr *expr,
-				 void *key, size_t key_size)
+				 const void *key, size_t key_size)
 {
 	return bitset_index_iterate_all_set2(index, expr, key, key_size,
 					    BITSET_OP_NOT);
@@ -298,7 +296,7 @@ bitset_index_iterate_all_not_set(struct bitset_index *index,
 static inline int
 bitset_index_iterate_any_set2(struct bitset_index *index,
 			      struct bitset_expr *expr,
-			      void *key, size_t key_size,
+			      const void *key, size_t key_size,
 			      enum bitset_unary_op pre_op)
 {
 	assert (index != NULL);
@@ -338,7 +336,7 @@ bitset_index_iterate_any_set2(struct bitset_index *index,
 int
 bitset_index_iterate_any_set(struct bitset_index *index,
 			     struct bitset_expr *expr,
-			     void *key, size_t key_size)
+			     const void *key, size_t key_size)
 {
 	return bitset_index_iterate_any_set2(index, expr, key, key_size,
 					     BITSET_OP_NULL);
@@ -347,7 +345,7 @@ bitset_index_iterate_any_set(struct bitset_index *index,
 int
 bitset_index_iterate_any_not_set(struct bitset_index *index,
 				 struct bitset_expr *expr,
-				 void *key, size_t key_size)
+				 const void *key, size_t key_size)
 {
 	return bitset_index_iterate_any_set2(index, expr, key, key_size,
 					     BITSET_OP_NOT);

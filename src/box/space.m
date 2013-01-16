@@ -120,69 +120,71 @@ key_free(struct key_def *key_def)
 	free(key_def->cmp_order);
 }
 
-void
+struct tuple *
 space_replace(struct space *sp, struct tuple *old_tuple,
-	      struct tuple *new_tuple)
+	      struct tuple *new_tuple, enum dup_replace_mode mode)
 {
-	int n = index_count(sp);
-	for (int i = 0; i < n; i++) {
-		Index *index = sp->index[i];
-		[index replace: old_tuple :new_tuple];
+	int i = 0;
+	@try {
+		/* Update the primary key */
+		Index *pk = sp->index[0];
+		assert(pk->key_def->is_unique);
+		/*
+		 * If old_tuple is not NULL, the index
+		 * has to find and delete it, or raise an
+		 * error.
+		 */
+		old_tuple = [pk replace: old_tuple :new_tuple :mode];
+
+		assert(old_tuple || new_tuple);
+		int n = index_count(sp);
+		/* Update secondary keys */
+		for (i = i + 1; i < n; i++) {
+			Index *index = sp->index[i];
+			[index replace: old_tuple :new_tuple :DUP_INSERT];
+		}
+		return old_tuple;
+	} @catch (tnt_Exception *e) {
+		/* Rollback all changes */
+		for (i = i - 1; i >= 0;  i--) {
+			Index *index = sp->index[i];
+			[index replace: new_tuple: old_tuple: DUP_INSERT];
+		}
+		@throw;
 	}
 }
 
 void
-space_validate(struct space *sp, struct tuple *old_tuple,
-	       struct tuple *new_tuple)
+space_validate_tuple(struct space *sp, struct tuple *new_tuple)
 {
-	int n = index_count(sp);
-
-	/* Only secondary indexes are validated here. So check to see
-	   if there are any.*/
-	if (n <= 1) {
-		return;
-	}
+	/* Check to see if the tuple has a sufficient number of fields. */
+	if (new_tuple->field_count < sp->max_fieldno)
+		tnt_raise(IllegalParams,
+			  :"tuple must have all indexed fields");
 
 	if (sp->arity > 0 && sp->arity != new_tuple->field_count)
-		tnt_raise(IllegalParams, :"tuple field count must match space cardinality");
+		tnt_raise(IllegalParams,
+			  :"tuple field count must match space cardinality");
 
 	/* Sweep through the tuple and check the field sizes. */
-	u8 *data = new_tuple->data;
+	const u8 *data = new_tuple->data;
 	for (int f = 0; f < sp->max_fieldno; ++f) {
 		/* Get the size of the current field and advance. */
-		u32 len = load_varint32((void **) &data);
+		u32 len = load_varint32((const void **) &data);
 		data += len;
-
-		/* Check fixed size fields (NUM and NUM64) and skip undefined
-		   size fields (STRING and UNKNOWN). */
+		/*
+		 * Check fixed size fields (NUM and NUM64) and
+		 * skip undefined size fields (STRING and UNKNOWN).
+		 */
 		if (sp->field_types[f] == NUM) {
 			if (len != sizeof(u32))
-				tnt_raise(IllegalParams, :"field must be NUM");
+				tnt_raise(ClientError, :ER_KEY_FIELD_TYPE,
+					  "u32");
 		} else if (sp->field_types[f] == NUM64) {
 			if (len != sizeof(u64))
-				tnt_raise(IllegalParams, :"field must be NUM64");
+				tnt_raise(ClientError, :ER_KEY_FIELD_TYPE,
+					  "u64");
 		}
-	}
-
-	/* Check key uniqueness */
-	for (int i = 1; i < n; ++i) {
-		Index *index = sp->index[i];
-		if (index->key_def->is_unique) {
-			struct tuple *tuple = [index findByTuple: new_tuple];
-			if (tuple != NULL && tuple != old_tuple)
-				tnt_raise(ClientError, :ER_INDEX_VIOLATION,
-					  index_n(index));
-		}
-	}
-}
-
-void
-space_remove(struct space *sp, struct tuple *tuple)
-{
-	int n = index_count(sp);
-	for (int i = 0; i < n; i++) {
-		Index *index = sp->index[i];
-		[index remove: tuple];
 	}
 }
 
@@ -214,13 +216,9 @@ key_init(struct key_def *def, struct tarantool_cfg_space_index *cfg_index)
 {
 	def->max_fieldno = 0;
 	def->part_count = 0;
-	if (strcmp(cfg_index->type, "HASH") == 0)
-		def->type = HASH;
-	else if (strcmp(cfg_index->type, "TREE") == 0)
-		def->type = TREE;
-	else if (strcmp(cfg_index->type, "BITSET") == 0)
-		def->type = BITSET;
-	else
+
+	def->type = STR2ENUM(index_type, cfg_index->type);
+	if (def->type == index_type_MAX)
 		panic("Wrong index type: %s", cfg_index->type);
 
 	/* Calculate key part count and maximal field number. */
@@ -370,8 +368,9 @@ space_config()
 			typeof(cfg_space->index[j]) cfg_index = cfg_space->index[j];
 			enum index_type type = STR2ENUM(index_type, cfg_index->type);
 			struct key_def *key_def = &space->key_defs[j];
-			Index *index = [Index alloc: type :key_def :space];
-			[index init: key_def :space];
+			Index *index = [[Index alloc :type :key_def :space]
+					init :key_def :space];
+			assert (index != NULL);
 			space->index[j] = index;
 		}
 

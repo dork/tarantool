@@ -34,10 +34,11 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
-#include <tarantool.h>
 #include <say.h>
 #include <string.h>
 #include <recovery.h>
+#include "tarantool.h"
+#include "box/box.h"
 
 static int
 lbox_info_recovery_lag(struct lua_State *L)
@@ -70,7 +71,7 @@ lbox_info_lsn(struct lua_State *L)
 static int
 lbox_info_status(struct lua_State *L)
 {
-	lua_pushstring(L, mod_status());
+	lua_pushstring(L, box_status());
 	return 1;
 }
 
@@ -162,7 +163,7 @@ lbox_info_init_static_values(struct lua_State *L)
 
 	/* box.info.build.flags */
 	lua_pushstring(L, "flags");
-	lua_pushstring(L, COMPILER_CFLAGS);
+	lua_pushstring(L, COMPILER_C_FLAGS);
 	lua_settable(L, -3);
 
 	lua_settable(L, -3);    /* box.info.build */

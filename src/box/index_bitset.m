@@ -46,7 +46,7 @@ static struct index_traits bitset_index_traits = {
 	.allows_partial_key = false,
 };
 
-inline
+static inline
 size_t tuple_to_value(struct tuple *tuple) {
 	size_t value = salloc_ptr_to_index(tuple);
 	assert(salloc_ptr_from_index(value) == tuple);
@@ -54,7 +54,7 @@ size_t tuple_to_value(struct tuple *tuple) {
 	return value;
 }
 
-inline
+static inline
 struct tuple *value_to_tuple(size_t value) {
 	return salloc_ptr_from_index(value);
 }
@@ -105,6 +105,8 @@ iterator_wrapper_next(struct iterator *iterator)
 
 - (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg
 {
+	assert (!key_def_arg->is_unique);
+
 	position_expr = bitset_expr_new();
 	if (position_expr == NULL) {
 		tnt_raise(SystemError, :"bitset_expr_new: %s",
@@ -151,7 +153,7 @@ iterator_wrapper_next(struct iterator *iterator)
 
 - (void) buildNext: (struct tuple *)tuple
 {
-	[self replace: NULL :tuple];
+	[self replace: NULL :tuple: DUP_INSERT];
 }
 
 - (void) endBuild
@@ -166,7 +168,7 @@ iterator_wrapper_next(struct iterator *iterator)
 	[pk initIterator: it :ITER_ALL :NULL :0];
 
 	while ((tuple = it->next(it)))
-		[self replace: NULL :tuple];
+		[self replace: NULL :tuple: DUP_INSERT];
 }
 
 - (size_t) size
@@ -184,16 +186,6 @@ iterator_wrapper_next(struct iterator *iterator)
 {
 	tnt_raise(ClientError, :ER_UNSUPPORTED, "BitsetIndex", "max()");
 	return NULL;
-}
-
-- (struct tuple *) findByTuple: (struct tuple *) tuple
-{
-	/* Bitmap index currently is always single-part. */
-	void *field = tuple_field(tuple, key_def->parts[0].fieldno);
-	if (field == NULL)
-		tnt_raise(ClientError, :ER_NO_SUCH_FIELD,
-			  key_def->parts[0].fieldno);
-	return [self findUnsafe :field :1];
 }
 
 - (struct iterator *) allocIterator
@@ -222,40 +214,19 @@ iterator_wrapper_next(struct iterator *iterator)
 	return (struct iterator *) it;
 }
 
-- (struct tuple *) findUnsafe: (void *) key :(int) part_count
+- (struct tuple *) findByKey: (void *) key :(int) part_count
 {
-	assert(position->free == iterator_wrapper_free);
-	struct iterator_wrapper *it = iterator_wrapper(position);
-
+	(void) key;
 	(void) part_count;
+	tnt_raise(ClientError, :ER_UNSUPPORTED, "BitsetIndex", "findByKey()");
+	return NULL;
+}
 
-	void *key2 = key;
-	size_t bitset_key_size = (size_t) load_varint32(&key2);
-	void *bitset_key = key2;
-
-	if (bitset_index_iterate_equals(
-				index, it->bitset_expr,
-				bitset_key, bitset_key_size) != 0) {
-		tnt_raise(SystemError, :"bitset_index_iterate: %s",
-			strerror(errno));
-	}
-
-	if (bitset_iterator_set_expr(it->bitset_it, it->bitset_expr) != 0) {
-		tnt_raise(SystemError, :"bitset_iterator_init: %s",
-			strerror(errno));
-	}
-
-	size_t value = bitset_iterator_next(it->bitset_it);
-
-	if (value == SIZE_MAX)
-		return NULL;
-
-	struct tuple *tuple = value_to_tuple(value);
-#ifdef DEBUG
-	say_debug("BitsetIndex: findUnsafe value = %zu (%p)",
-		  value, tuple);
-#endif
-	return tuple;
+- (struct tuple *) findByTuple: (struct tuple *) tuple
+{
+	(void) tuple;
+	tnt_raise(ClientError, :ER_UNSUPPORTED, "BitsetIndex", "findByKey()");
+	return NULL;
 }
 
 - (struct tuple *) replace: (struct tuple *) old_tuple
@@ -265,17 +236,14 @@ iterator_wrapper_next(struct iterator *iterator)
 	(void) flags;
 
 	assert (old_tuple != NULL || new_tuple != NULL);
-	assert (!key_def->is_unique);
 
 	struct tuple *ret = NULL;
 
 	if (new_tuple != NULL) {
-		void *field = tuple_field(new_tuple, key_def->parts[0].fieldno);
-		if (unlikely(field == NULL))
-			tnt_raise(ClientError, :ER_NO_SUCH_FIELD,
-				  key_def->parts[0].fieldno);
+		const void *field = tuple_field(new_tuple, key_def->parts[0].fieldno);
+		assert (field != NULL);
 		size_t bitset_key_size = (size_t) load_varint32(&field);
-		void *bitset_key = field;
+		const void *bitset_key = field;
 
 		size_t value = tuple_to_value(new_tuple);
 #ifdef DEBUG
@@ -306,21 +274,6 @@ iterator_wrapper_next(struct iterator *iterator)
 	return ret;
 }
 
-/*
- * TODO: remove these methods after merging "index-speedup" branch
- */
-
-- (void) replace: (struct tuple *) old_tuple
-	:(struct tuple *) new_tuple
-{
-	[self replace: old_tuple: new_tuple: 0];
-}
-
-- (void) remove: (struct tuple *) tuple
-{
-	[self replace: tuple: NULL: 0];
-}
-
 - (void) initIterator: (struct iterator *) iterator
 	:(enum iterator_type) type
 	:(void *) key :(int) part_count
@@ -328,13 +281,13 @@ iterator_wrapper_next(struct iterator *iterator)
 	assert(iterator->free == iterator_wrapper_free);
 	struct iterator_wrapper *it = iterator_wrapper(iterator);
 
-	void *bitset_key = NULL;
+	const void *bitset_key = NULL;
 	size_t bitset_key_size = 0;
 
 	if (type != ITER_ALL) {
 		check_key_parts(key_def, part_count,
 				bitset_index_traits.allows_partial_key);
-		void *key2 = key;
+		const void *key2 = key;
 		bitset_key_size = (size_t) load_varint32(&key2);
 		bitset_key = key2;
 	}

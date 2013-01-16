@@ -78,7 +78,7 @@ bitset_index_delete(struct bitset_index *index);
  * @return zero on success and non-zero otherwise
  */
 int
-bitset_index_insert(struct bitset_index *index, void *key, size_t key_size,
+bitset_index_insert(struct bitset_index *index, const void *key, size_t key_size,
 		    size_t value);
 
 /**
@@ -116,7 +116,7 @@ bitset_index_iterate_all(struct bitset_index *index,
 int
 bitset_index_iterate_equals(struct bitset_index *index,
 			    struct bitset_expr *expr,
-			    void *key, size_t key_size);
+			    const void *key, size_t key_size);
 
 /**
  * @brief Initialize @a expr to iterate over all elements in the @a index.
@@ -133,7 +133,7 @@ bitset_index_iterate_equals(struct bitset_index *index,
 int
 bitset_index_iterate_all_set(struct bitset_index *index,
 			     struct bitset_expr *expr,
-			     void *key, size_t key_size);
+			     const void *key, size_t key_size);
 
 /**
  * @brief Initialize @a expr to iterate over all elements in the @a index.
@@ -150,7 +150,7 @@ bitset_index_iterate_all_set(struct bitset_index *index,
 int
 bitset_index_iterate_all_not_set(struct bitset_index *index,
 				 struct bitset_expr *expr,
-				 void *key, size_t key_size);
+				 const void *key, size_t key_size);
 
 /**
  * @brief Initialize @a expr to iterate over all elements in the index.
@@ -167,7 +167,7 @@ bitset_index_iterate_all_not_set(struct bitset_index *index,
 int
 bitset_index_iterate_any_set(struct bitset_index *index,
 			     struct bitset_expr *expr,
-			     void *key, size_t key_size);
+			     const void *key, size_t key_size);
 
 
 /**
@@ -185,7 +185,7 @@ bitset_index_iterate_any_set(struct bitset_index *index,
 int
 bitset_index_iterate_any_not_set(struct bitset_index *index,
 				 struct bitset_expr *expr,
-				 void *key, size_t key_size);
+				 const void *key, size_t key_size);
 
 /**
  * @brief Checks if a (*, @a value) pair is exist in the @a index

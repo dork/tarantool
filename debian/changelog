@@ -1,3 +1,28 @@
+tarantool (1.4.8+20130110-1) unstable; urgency=low
+
+  * New snapshot (Implement box.session, on_connect and
+    on_disconnect triggers.)
+
+ -- Dmitry E. Oboukhov <unera@debian.org>  Thu, 10 Jan 2013 23:03:42 +0400
+
+tarantool (1.4.8+20130104-1) unstable; urgency=low
+
+  * New snapshot (segfault in tree iterator).
+
+ -- Dmitry E. Oboukhov <unera@debian.org>  Fri, 04 Jan 2013 01:29:54 +0400
+
+tarantool (1.4.8+20121214-1) unstable; urgency=low
+
+  * New snapshot (fix segfault with box.ipc.channel).
+
+ -- Dmitry E. Oboukhov <unera@debian.org>  Fri, 14 Dec 2012 16:39:02 +0400
+
+tarantool (1.4.8+20121207-1) unstable; urgency=low
+
+  * New snapshot (add box.time64 needed by queues).
+
+ -- Dmitry E. Oboukhov <unera@debian.org>  Fri, 07 Dec 2012 14:45:38 +0400
+
 tarantool (1.4.8-1) unstable; urgency=low
 
   * New tarantool release.
