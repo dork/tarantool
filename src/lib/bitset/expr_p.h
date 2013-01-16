@@ -1,5 +1,5 @@
-#ifndef BITSET_EXPR_P_H_INCLUDED
-#define BITSET_EXPR_P_H_INCLUDED
+#ifndef TARANTOOL_LIB_BITSET_EXPR_P_H_INCLUDED
+#define TARANTOOL_LIB_BITSET_EXPR_P_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -36,7 +36,9 @@
  * @author Roman Tsisyk
  */
 
-#include "expr.h"
+#include "config.h"
+
+#include <lib/bitset/expr.h>
 
 struct bitset_expr_group {
 	/** operation to combine (reduce) bitsets during iterations **/
@@ -75,4 +77,4 @@ extern const size_t EXPR_DEFAULT_CAPACITY;
 extern const size_t EXPR_GROUP_DEFAULT_CAPACITY;
 /** @endcond **/
 
-#endif /* BITSET_EXPR_P_H_INCLUDED */
+#endif /* TARANTOOL_LIB_BITSET_EXPR_P_H_INCLUDED */

@@ -27,11 +27,13 @@
  * SUCH DAMAGE.
  */
 
-#include "bitset.h"
+#include <lib/bitset/bitset.h>
 #include "bitset_p.h"
 
+#include <stddef.h>
 #include <malloc.h>
-#include <errno.h>
+#include <string.h>
+#include <assert.h>
 
 #if defined(ENABLE_SSE2) || defined(ENABLE_AVX)
 bitset_word_t
@@ -109,8 +111,8 @@ bit_index_u256(const u256 x, int *indexes, int offset)
 {
 #if   WORD_BIT == 64
 	union __cast {
-		u256 u256;
-		u64  u64[4];
+		__m256i u256;
+		uint64_t u64[4];
 	} w;
 	w.u256 = x;
 	indexes = bit_index_u64(w.u64[0], indexes, offset + 0);
@@ -120,8 +122,8 @@ bit_index_u256(const u256 x, int *indexes, int offset)
 	return indexes;
 #elif WORD_BIT == 32
 	union __cast {
-		u256 u256;
-		u32 u32[8];
+		__m256i u256;
+		uint32_t u32[8];
 	} w;
 	w.u256 = x;
 	indexes = bit_index_u32(w.u32[0], indexes, offset + 0);
@@ -141,12 +143,12 @@ bit_index_u256(const u256 x, int *indexes, int offset)
 
 #if   defined(ENABLE_SSE2)
 static inline int *
-bit_index_u128(const u128 x, int *indexes, int offset)
+bit_index_u128(const __m128i x, int *indexes, int offset)
 {
 #if   WORD_BIT == 64
 	union __cast {
-		u128 u128;
-		u64 u64[2];
+		__m128i u128;
+		uint64_t u64[2];
 	} w;
 	w.u128 = x;
 	indexes = bit_index_u64(w.u64[0], indexes, offset + 0);
@@ -154,8 +156,8 @@ bit_index_u128(const u128 x, int *indexes, int offset)
 	return indexes;
 #elif WORD_BIT == 32
 	union __cast {
-		u128 u128;
-		u32 u32[4];
+		__m128i u128;
+		uint32_t u32[4];
 	} w;
 	w.u128 = x;
 	indexes = bit_index_u32(w.u32[0], indexes, offset + 0);

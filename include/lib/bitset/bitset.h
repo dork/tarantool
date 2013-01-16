@@ -1,5 +1,5 @@
-#ifndef BITSET_BITSET_H_INCLUDED
-#define BITSET_BITSET_H_INCLUDED
+#ifndef TARANTOOL_LIB_BITSET_BITSET_H_INCLUDED
+#define TARANTOOL_LIB_BITSET_BITSET_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -41,7 +41,10 @@
  * @author Roman Tsisyk
  */
 
-#include <util.h>
+#include "config.h"
+
+#include <stddef.h>
+#include <stdbool.h>
 
 struct bitset;
 
@@ -111,4 +114,4 @@ void
 bitset_dump(struct bitset *bitset, int verbose, FILE *stream);
 #endif
 
-#endif // BITSET_BITSET_H_INCLUDED
+#endif /* TARANTOOL_LIB_BITSET_BITSET_H_INCLUDED */

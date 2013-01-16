@@ -37,8 +37,8 @@
 #include "space.h"
 #include "exception.h"
 #include "pickle.h"
-#include "bitset/bitset.h"
-#include "bitset/index.h"
+#include <lib/bitset/bitset.h>
+#include <lib/bitset/index.h>
 
 /* {{{ BitsetIndex ************************************************/
 

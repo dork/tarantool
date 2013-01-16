@@ -3,8 +3,7 @@
 #include <stdbool.h>
 #include <limits.h>
 
-#include "src/box/bitset/bitset.h"
-#include "src/box/bitset/index.h"
+#include <lib/bitset/index.h>
 #include "unit.h"
 
 static

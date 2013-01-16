@@ -27,10 +27,12 @@
  * SUCH DAMAGE.
  */
 
-#include "expr.h"
+#include <lib/bitset/expr.h>
 #include "expr_p.h"
 
+#include <assert.h>
 #include <malloc.h>
+#include <string.h>
 
 const size_t EXPR_DEFAULT_CAPACITY = 2;
 const size_t EXPR_GROUP_DEFAULT_CAPACITY = 32;

@@ -1,6 +1,5 @@
-#ifndef BITSET_BITSET_P_H_INCLUDED
-#define BITSET_BITSET_P_H_INCLUDED
-
+#ifndef TARANTOOL_LIB_BITSET_BITSET_P_H_INCLUDED
+#define TARANTOOL_LIB_BITSET_BITSET_P_H_INCLUDED
 /*
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -37,9 +36,9 @@
  * @author Roman Tsisyk
  */
 
-#include <util.h>
+#include "config.h"
 
-#include <stdlib.h>
+#include <string.h>
 #include <limits.h>
 
 #include <third_party/tree.h>
@@ -51,19 +50,11 @@
 #endif /* defined(ENABLE_SSE2) || defined(ENABLE_AVX) */
 
 #if   defined(ENABLE_AVX)
-typedef __m256i u256;
-#endif
-
-#if   defined(ENABLE_SSE2)
-typedef __m128i u128;
-#endif
-
-#if   defined(ENABLE_AVX)
-typedef u256 bitset_word_t;
+typedef __m256i bitset_word_t;
 #define __BITSET_WORD_BIT 256
 #define BITSET_WORD_ALIGNMENT 32
 #elif defined(ENABLE_SSE2)
-typedef u128 bitset_word_t;
+typedef __m128i bitset_word_t;
 #define __BITSET_WORD_BIT 128
 #define BITSET_WORD_ALIGNMENT 16
 #else /* !defined(ENABLE_SSE2) && !defined(ENABLE_AVX) */
@@ -88,8 +79,6 @@ typedef size_t bitset_word_t; /* is always size_t if sse is disabled */
 /*
  * Operations on words
  */
-
-/* TODO(roman): implement word_xxx methods using SSE2 */
 
 static inline bitset_word_t
 word_set_zeros(void)
@@ -291,4 +280,4 @@ bitset_page_cmp(const struct bitset_page *a, const struct bitset_page *b)
 
 RB_PROTOTYPE(bitset_pages_tree, bitset_page, node, bitset_page_cmp);
 
-#endif /* BITSET_BITSET_P_H_INCLUDED */
+#endif /* TARANTOOL_LIB_BITSET_BITSET_P_H_INCLUDED */

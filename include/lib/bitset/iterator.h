@@ -44,8 +44,6 @@
  * @author Roman Tsisyk
  */
 
-#include <util.h>
-
 #include "bitset.h"
 #include "expr.h"
 

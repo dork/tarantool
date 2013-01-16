@@ -1,5 +1,5 @@
-#ifndef BITSET_EXPR_H_INCLUDED
-#define BITSET_EXPR_H_INCLUDED
+#ifndef TARANTOOL_LIB_BITSET_EXPR_H_INCLUDED
+#define TARANTOOL_LIB_BITSET_EXPR_H_INCLUDED
 
 /*
  * Redistribution and use in source and binary forms, with or
@@ -165,4 +165,4 @@ size_t
 bitset_expr_group_size(struct bitset_expr *expr,
 		       size_t group_id);
 
-#endif /* BITSET_EXPR_H_INCLUDED */
+#endif /* TARANTOOL_LIB_BITSET_EXPR_H_INCLUDED */

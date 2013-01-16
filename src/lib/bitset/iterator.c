@@ -27,12 +27,11 @@
  * SUCH DAMAGE.
  */
 
-#include "iterator.h"
-
-
-#include "bitset.h"
+#include <lib/bitset/iterator.h>
 #include "bitset_p.h"
 #include "expr_p.h"
+
+#include <assert.h>
 
 /**
  * BitmapIterator definition

@@ -3,8 +3,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#include "src/box/bitset/bitset.h"
-#include "src/box/bitset/index.h"
+#include <lib/bitset/bitset.h>
 #include "unit.h"
 
 static

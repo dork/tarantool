@@ -1,6 +1,5 @@
-#ifndef BITSET_INDEX_H_INCLUDED
-#define BITSET_INDEX_H_INCLUDED
-
+#ifndef TARANTOOL_LIB_BITSET_INDEX_H_INCLUDED
+#define TARANTOOL_LIB_BITSET_INDEX_H_INCLUDED
 /*
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -37,8 +36,6 @@
  * @see bitset.h
  * @author Roman Tsisyk
  */
-
-#include <util.h>
 
 #include "bitset.h"
 #include "iterator.h"
@@ -210,4 +207,4 @@ void
 bitset_index_dump(struct bitset_index *index, int verbose, FILE *stream);
 #endif /* defined(DEBUG) */
 
-#endif // BITSET_INDEX_H_INCLUDED
+#endif /* TARANTOOL_LIB_BITSET_INDEX_H_INCLUDED */

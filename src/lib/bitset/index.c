@@ -27,9 +27,10 @@
  * SUCH DAMAGE.
  */
 
-#include "index.h"
-#include <stdio.h>
+#include <lib/bitset/index.h>
 #include "bitset_p.h"
+
+#include <assert.h>
 
 struct bitset_index {
 	struct bitset **bitsets;
