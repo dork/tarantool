@@ -1,1 +1,1 @@
-run_test("bitset_iterator")
+run_test("bitset_iterator_test")

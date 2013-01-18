@@ -30,10 +30,11 @@ test/unit/rope
 test/unit/rope_avl
 test/unit/rope_basic
 test/unit/rope_stress
-test/unit/bitset_basic
-test/unit/bitset_iterator
-test/unit/bitset_index
+test/unit/bitset_basic_test
+test/unit/bitset_iterator_test
+test/unit/bitset_index_test
 test/unit/rlist
+test/unit/bit_test
 Makefile
 CMakeFiles
 CMakeCache.txt

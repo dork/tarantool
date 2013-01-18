@@ -13,6 +13,7 @@ include(CheckCSourceRuns)
 include(CheckCXXSourceRuns)
 include(TestBigEndian)
 include(CheckFunctionExists)
+include(CheckBuiltInFunctionExists)
 
 find_program(ECHO echo)
 find_program(XSLTPROC xsltproc)
@@ -95,30 +96,15 @@ if (CMAKE_COMPILER_IS_GNUCC)
     endif()
 endif()
 
-# CMake's check_function_exists doesn't check builtins
-check_c_source_runs("int main(int a) { __builtin_ctz(a); return 0; }"
-    HAVE_CTZ)
-check_c_source_runs("int main(int a) { __builtin_ctzll(a); return 0; }"
-    HAVE_CTZLL)
-check_c_source_runs("int main(int a) { __builtin_clz(a); return 0; }"
-    HAVE_CLZ)
-check_c_source_runs("int main(int a) { __builtin_clzll(a); return 0; }"
-    HAVE_CLZLL)
-check_c_source_runs("int main(int a) { __builtin_popcount(a); return 0; }"
-    HAVE_POPCOUNT)
-check_c_source_runs("int main(int a) { __builtin_popcountll(a); return 0; }"
-    HAVE_POPCOUNTLL)
-check_c_source_runs("int main(int a) { __builtin_bswap32(a); return 0; }"
-    HAVE_BSWAP32)
-check_c_source_runs("int main(int a) { __builtin_bswap64(a); return 0; }"
-    HAVE_BSWAP64)
-
 if ((CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64") AND CC_HAS_SSE2_INTRINSICS)
     # any amd64 supports sse2 instructions
-    option(ENABLE_SSE2 "Enable compile-time SSE2 support." ON)
+    set(ENABLE_SSE2_DEFAULT ON)
 else()
-    option(ENABLE_SSE2 "Enable compile-time SSE2 support." OFF)
+    set(ENABLE_SSE2_DEFAULT OFF)
 endif()
+
+option(ENABLE_SSE2 "Enable compile-time SSE2 support." ON)
+option(ENABLE_AVX  "Enable compile-time AVX support." OFF)
 
 if (ENABLE_SSE2)
     if (!CC_HAS_SSE2_INTRINSICS)
@@ -128,8 +114,6 @@ if (ENABLE_SSE2)
         message(STATUS "SSE2 is enabled - target CPU must support it")
     endif()
 endif()
-
-option(ENABLE_AVX  "Enable compile-time AVX support." OFF)
 
 if (ENABLE_AVX)
     if (!CC_HAS_AVX_INTRINSICS)

@@ -8,18 +8,14 @@ add_executable(rope_basic rope_basic.c ${CMAKE_SOURCE_DIR}/src/rope.c)
 add_executable(rope_avl rope_avl.c ${CMAKE_SOURCE_DIR}/src/rope.c)
 add_executable(rope_stress rope_stress.c ${CMAKE_SOURCE_DIR}/src/rope.c)
 add_executable(rope rope.c ${CMAKE_SOURCE_DIR}/src/rope.c)
-
-# Bitmap tests
-add_executable(bitset_basic bitset_basic.c)
-target_link_libraries(bitset_basic bitset)
-add_executable(bitset_iterator bitset_iterator.c)
-target_link_libraries(bitset_iterator bitset)
-add_executable(bitset_index bitset_index.c)
-target_link_libraries(bitset_index bitset)
-set_target_properties(bitset_basic
-		      bitset_iterator
-		      bitset_index
-    PROPERTIES COMPILE_FLAGS "-std=c99")
+add_executable(bit_test bit.c bit.c)
+target_link_libraries(bit_test bit)
+add_executable(bitset_basic_test bitset_basic.c)
+target_link_libraries(bitset_basic_test bitset)
+add_executable(bitset_iterator_test bitset_iterator.c)
+target_link_libraries(bitset_iterator_test bitset)
+add_executable(bitset_index_test bitset_index.c)
+target_link_libraries(bitset_index_test bitset)
 
 add_executable(objc_finally objc_finally.m)
 add_executable(objc_catchcxx objc_catchcxx.m)
