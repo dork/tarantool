@@ -97,6 +97,7 @@ set (common_sources
      lua/uuid.m
      lua/lua_ipc.m
      lua/session.m
+     lua/remote.m
 )
 
 if (ENABLE_TRACE)

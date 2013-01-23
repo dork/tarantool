@@ -50,6 +50,7 @@
 #include "lua/stat.h"
 #include "lua/uuid.h"
 #include "lua/session.h"
+#include "lua/remote.h"
 
 #include <sys/time.h>
 #include <sys/types.h>
@@ -1368,6 +1369,7 @@ tarantool_lua_init()
 	tarantool_lua_ipc_init(L);
 	tarantool_lua_uuid_init(L);
 	tarantool_lua_session_init(L);
+	tarantool_lua_remote_init(L);
 
 	mod_lua_init(L);
 
