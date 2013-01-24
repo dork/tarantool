@@ -224,7 +224,7 @@ lbox_pack(struct lua_State *L)
 	luaL_Buffer b;
 	const char *format = luaL_checkstring(L, 1);
 	/* first arg comes second */
-	int i = 2;
+	int i = 2, j;
 	int nargs = lua_gettop(L);
 	u16 u16buf;
 	u32 u32buf;
@@ -239,6 +239,44 @@ lbox_pack(struct lua_State *L)
 			luaL_error(L, "box.pack: argument count does not match "
 				   "the format");
 		switch (*format) {
+		case 'h':
+		case 'H':
+			str = luaL_checklstring(L, i, &size);
+			if (size % 2)
+				luaL_error(L, "box.pack: wrong length of "
+					"hexstring");
+			for (j = 0; j < size; j += 2) {
+				char ch = str[j];
+				char cl = str[j + 1];
+
+				if (ch >= '0' && ch <= '9') {
+					ch -= '0';
+				} else if (ch >= 'a' && ch <= 'f') {
+					ch -= 'a';
+					ch += 10;
+				} else if (ch >= 'A' && ch <= 'F') {
+					ch -= 'A';
+					ch += 10;
+				} else {
+					luaL_error(L, "box.pack: wrong symbol "
+						"in hexstring");
+				}
+				if (cl >= '0' && cl <= '9') {
+					cl -= '0';
+				} else if (cl >= 'a' && cl <= 'f') {
+					cl -= 'a';
+					cl += 10;
+				} else if (cl >= 'A' && cl <= 'F') {
+					cl -= 'A';
+					cl += 10;
+				} else {
+					luaL_error(L, "box.pack: wrong symbol "
+						"in hexstring");
+				}
+				luaL_addchar(&b, (ch << 4) | cl);
+			}
+			break;
+
 		case 'B':
 		case 'b':
 			/* signed and unsigned 8-bit integers */
@@ -385,6 +423,34 @@ lbox_unpack(struct lua_State *L)
 }
 	while (*f) {
 		switch (*f) {
+		case 'h':
+		case 'H': {
+			luaL_Buffer b;
+			luaL_buffinit(L, &b);
+			for (; s < end; s++) {
+				unsigned char c = *s;
+				c >>= 4;
+				if (c < 10) {
+					c += '0';
+				} else {
+					c -= 10;
+					c += 'A';
+				}
+				luaL_addchar(&b, c);
+				c = *s;
+				c &= 0xF;
+				if (c < 10) {
+					c += '0';
+				} else {
+					c -= 10;
+					c += 'A';
+				}
+				luaL_addchar(&b, c);
+
+			}
+			luaL_pushresult(&b);
+			break;
+		}
 		case 'b':
 			CHECK_SIZE(s);
 			u8buf = *(u8 *) s;

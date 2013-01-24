@@ -682,6 +682,9 @@ localhost> lua box.select_reverse_range(4, 1, 2, '1')
                 <member><code>w</code> &mdash; converts Lua
                 integer to a BER-encoded integer,
                 </member>
+                <member><code>h</code> &mdash; convert Lua string
+                into hexstring
+                </member>
                 <member><code>p</code> &mdash; stores the length
                 of the argument as a BER-encoded integer
                 followed by the argument itself (a 4-bytes for integers (LE order)
@@ -726,6 +729,15 @@ localhost> lua box.update(0, 0, "^p", 1, 4)
 ---
  - 0: {12}
 ...
+localhost> lua box.unpack('h', '01234567890abcф')
+---
+ - 3031323334353637383930616263D184
+...
+localhost> lua box.pack('h', '3031323334353637383930616263D184')
+---
+ - 01234567890abcф
+...
+
 </programlisting>
         </para></listitem>
     </varlistentry>

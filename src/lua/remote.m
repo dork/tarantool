@@ -1,3 +1,4 @@
+#include "fiber.h"
 #include "lua/remote.h"
 
 #include "lua.h"
@@ -5,19 +6,28 @@
 #include "lualib.h"
 #include "../connector/c/include/tp.h"
 
+#define CHUNK_SIZE	1024
 
 static char *
 buf_resizer(struct tp *p, size_t req, size_t *size)
 {
-	luaL_Buffer *b = p->obj;
-	size_t new_size = req + tp_size(p);
-	luaL_addsize(b, new_size);
+
+	size_t new_size = tp_size(p) + CHUNK_SIZE;
+	if (tp_used(p) + req > new_size) {
+		new_size = ((tp_used(p) + req) / CHUNK_SIZE + 1) * CHUNK_SIZE;
+	}
+	char *new_buf = palloc(fiber->gc_pool, new_size);
+	if (!new_buf)
+		luaL_error(p->obj, "Can't allocate memory for request");
+	if (tp_used(p) > 0) {
+		memcpy(new_buf, p->s, tp_used(p));
+	}
 	*size = new_size;
-	return luaL_prepbuffer(b);
+	return new_buf;
 }
 
 static void
-buf_push_tuple(struct tp *req, struct lua_State *L, int idx)
+tp_push_lua_tuple(struct tp *req, struct lua_State *L, int idx)
 {
 	tp_tuple(req);
 	/* TODO: tuple object */
@@ -34,18 +44,15 @@ buf_push_tuple(struct tp *req, struct lua_State *L, int idx)
 /**
  * box.remote.protocol.insert(id, space, flags, tuple)
  */
-static int
+int
 lbox_tp_insert(struct lua_State *L)
 {
-	luaL_Buffer b;
-	luaL_buffinit(L, &b);
 	struct tp req;
-
-	tp_init(&req, "", 0, buf_resizer, &b);
+	tp_init(&req, "", 0, buf_resizer, L);
 	tp_insert(&req, lua_tointeger(L, 2), lua_tointeger(L, 3));
 	tp_reqid(&req, lua_tointeger(L, 1));
-	buf_push_tuple(&req, L, 4);
-	luaL_pushresult(&b);
+	tp_push_lua_tuple(&req, L, 4);
+	lua_pushlstring(L, req.s, tp_used(&req));
 	return 1;
 }
 
@@ -56,14 +63,11 @@ lbox_tp_insert(struct lua_State *L)
 static int
 lbox_tp_ping(struct lua_State *L)
 {
-	luaL_Buffer b;
-	luaL_buffinit(L, &b);
 	struct tp req;
-
-	tp_init(&req, "", 0, buf_resizer, &b);
+	tp_init(&req, "", 0, buf_resizer, L);
 	tp_ping(&req);
 	tp_reqid(&req, lua_tointeger(L, 1));
-	luaL_pushresult(&b);
+	lua_pushlstring(L, req.s, tp_used(&req));
 	return 1;
 }
 

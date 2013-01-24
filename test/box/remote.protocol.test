@@ -1,0 +1,24 @@
+# encoding: tarantool
+
+print "box remote tests"
+exec admin "lua type(box.remote)"
+exec admin "lua type(box.remote.protocol)"
+
+exec admin "lua type(box.remote.protocol.ping)"
+exec admin "lua type(box.remote.protocol.insert)"
+exec admin "lua type(box.remote.protocol.delete)"
+exec admin "lua type(box.remote.protocol.select)"
+exec admin "lua type(box.remote.protocol.update)"
+exec admin "lua type(box.remote.protocol.call)"
+
+exec admin "lua box.unpack('h', '01234567890abcф')"
+exec admin "lua box.pack('h', box.unpack('h', '01234567890abcф'))"
+exec admin "lua box.pack('h', box.unpack('h', 'абвгдежзиклмн')) == 'абвгдежзиклмн'"
+
+exec admin "lua function pheader(p) print(box.unpack('i', string.sub(p, 1, 4)), ' ', box.unpack('i', string.sub(p, 5, 8)), ' ', box.unpack('i', string.sub(p, 9, 12))) end"
+
+exec admin "lua box.unpack('h', box.remote.protocol.ping(123))"
+exec admin "lua pheader(box.remote.protocol.ping(15))"
+exec admin "lua pheader(box.remote.protocol.insert(12, 0, 1, { 1, 2, 3 }))"
+exec admin "lua box.unpack('h', box.remote.protocol.insert(12, 0, 1, { 1, 2, 3 }))"
+
